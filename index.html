@@ -2,17 +2,14 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>みんなの買い物リスト</title>
   <link rel="stylesheet" href="style.css">
-  <!-- Supabase JS Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <!-- 通知トースト -->
   <div id="toast" class="toast hidden"></div>
 
-  <!-- パスワード入力画面 -->
   <div id="login-view" class="view hidden">
     <div class="login-container">
       <div class="login-logo">🛒</div>
@@ -23,7 +20,6 @@
     </div>
   </div>
 
-  <!-- メイン画面 (カテゴリ一覧) -->
   <div id="main-view" class="view hidden">
     <header>
       <div class="header-title">
@@ -32,11 +28,10 @@
       </div>
       <button id="go-trash-btn" class="icon-btn">🗑️ ゴミ箱</button>
     </header>
-    <div class="notice-bar">項目をタップすると、中に品物を追加・確認できます</div>
+    <div class="notice-bar">項目をタップすると、品物を追加・確認・削除できます</div>
     <div class="content" id="category-list"></div>
   </div>
 
-  <!-- カテゴリ詳細画面 -->
   <div id="detail-view" class="view hidden">
     <header>
       <button id="back-btn" class="icon-btn">◀ 戻る</button>
@@ -44,7 +39,6 @@
       <button id="edit-mode-btn" class="secondary-btn">編集</button>
     </header>
     
-    <!-- 一括編集アクションバー -->
     <div id="edit-actions" class="edit-actions hidden">
       <label class="select-all-label">
         <input type="checkbox" id="select-all-chk"> すべて選択
@@ -55,7 +49,6 @@
 
     <div class="content" id="item-list"></div>
 
-    <!-- 下部固定アイテム追加フォーム -->
     <div id="add-form" class="add-form">
       <input type="text" id="new-item-name" placeholder="品物を入力...">
       <div class="qty-control">

@@ -24,7 +24,7 @@ let state = {
   password: localStorage.getItem('app_password') || '',
   userName: '',
   items: [],       // 通常の買い物リスト
-  trashItems: [],  // ★追加：ゴミ箱専用の独立した箱
+  trashItems: [],  // ゴミ箱専用の独立した箱
   currentCategory: null, 
   isEditMode: false,
   selectedIds: new Set(),
@@ -87,11 +87,9 @@ const saveReadItems = () => {
 const fetchItems = async (isBackground = false) => {
   if (!state.userName) return;
   try {
-    // ★通常のアイテムは「常に」最新の状態を別枠で取得・保持する
     const itemsData = await rpc('get_items');
     state.items = itemsData || [];
     
-    // ★ゴミ箱を開いている時だけ、ゴミ箱専用の箱にデータを入れる
     if (state.currentCategory === 'trash') {
       const trashData = await rpc('get_trash_items');
       state.trashItems = trashData || [];
@@ -132,10 +130,15 @@ const renderCategoryList = () => {
   const scrollTop = container.scrollTop;
   container.innerHTML = '';
 
-  CATEGORIES.forEach(cat => {
-    // ★state.itemsには絶対にゴミ箱のデータが混ざらないため、件数計算が狂わなくなります
+  // 各カテゴリの品物数を計算し、件数が多い順（降順）に並び替える
+  const sortedCategories = CATEGORIES.map(cat => {
     const catItems = state.items.filter(i => i.category === cat.name);
-    const hasItems = catItems.length > 0;
+    return { ...cat, catItems, count: catItems.length };
+  }).sort((a, b) => b.count - a.count);
+
+  sortedCategories.forEach(cat => {
+    const catItems = cat.catItems;
+    const hasItems = cat.count > 0;
     const lastItem = hasItems ? catItems[catItems.length - 1] : null;
     const timeDisplay = lastItem ? formatDate(lastItem.created_at) : 'なし';
     
@@ -163,7 +166,7 @@ const renderCategoryList = () => {
         <p>最終追加: ${timeDisplay}</p>
       </div>
       <div class="count" style="background-color: ${cat.hex}; opacity: ${hasItems ? 1 : 0.4}">
-        ${catItems.length}
+        ${cat.count}
       </div>
     `;
     container.appendChild(div);
@@ -210,7 +213,6 @@ const renderItemList = () => {
 
   container.innerHTML = '';
   
-  // ゴミ箱ならstate.trashItems、通常ならstate.itemsからデータを引っ張る
   let targetItems = isTrash ? state.trashItems : state.items.filter(i => i.category === state.currentCategory);
 
   if (targetItems.length === 0) {
@@ -351,7 +353,6 @@ window.toggleSelect = (id, isChecked) => {
 
 document.getElementById('select-all-chk').onchange = (e) => {
   const isTrash = state.currentCategory === 'trash';
-  // 全選択チェック時も、ゴミ箱と通常の箱を正しく切り分ける
   const targetItems = isTrash ? state.trashItems : state.items.filter(i => i.category === state.currentCategory);
   
   if (e.target.checked) targetItems.forEach(i => state.selectedIds.add(i.id));
