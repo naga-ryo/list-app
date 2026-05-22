@@ -1,0 +1,232 @@
+:root {
+  --bg-color: #f4f6f8;
+  --surface: #ffffff;
+  --text-main: #2c3e50;
+  --text-sub: #7f8c8d;
+  --accent: #2ecc71;
+  --accent-hover: #27ae60;
+  --danger: #e74c3c;
+  --border: #e2e8f0;
+  
+  /* 親しみやすいカテゴリカラー */
+  --c-veg: #2ecc71;
+  --c-meat: #e74c3c;
+  --c-fish: #3498db;
+  --c-drink: #1abc9c;
+  --c-frozen: #9b59b6;
+  --c-seasoning: #f1c40f;
+  --c-snack: #e84393;
+  --c-daily: #a29bfe;
+  --c-other: #95a5a6;
+}
+
+* { 
+  box-sizing: border-box; 
+  margin: 0; 
+  padding: 0; 
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hidden { display: none !important; }
+
+/* トースト通知 */
+.toast {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  background: rgba(44, 62, 80, 0.95); color: #fff;
+  padding: 12px 24px; border-radius: 30px; z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 0.95rem;
+  font-weight: bold; transition: all 0.3s ease;
+  text-align: center; pointer-events: none;
+}
+.toast.error { background: var(--danger); }
+.toast.success { background: var(--accent); }
+
+/* 基本レイアウト */
+.view { height: 100vh; display: flex; flex-direction: column; }
+
+header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px; background: var(--surface); 
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+header h1 { font-size: 1.3rem; font-weight: 800; color: var(--text-main); }
+
+.notice-bar {
+  background: #eef2f7; color: var(--text-sub);
+  font-size: 0.8rem; text-align: center; padding: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.content { 
+  flex: 1; 
+  overflow-y: auto; 
+  padding: 12px; 
+  padding-bottom: 100px; 
+}
+
+/* ボタンデザイン */
+button {
+  padding: 10px 16px; border-radius: 12px; font-size: 0.95rem; 
+  font-weight: bold; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-main);
+  cursor: pointer; transition: background 0.2s;
+}
+button:active { opacity: 0.7; transform: scale(0.98); }
+.primary-btn { background: var(--accent); color: white; border: none; }
+.secondary-btn { background: #edf2f7; border: none; color: var(--text-main); }
+.danger-btn { background: var(--danger); color: white; border: none; }
+.icon-btn { background: transparent; border: none; color: var(--text-main); font-size: 1.1rem; padding: 6px; }
+
+/* ログイン画面 */
+.login-container { margin: auto; padding: 32px; text-align: center; width: 100%; max-width: 400px; }
+.login-logo { font-size: 4rem; margin-bottom: 16px; }
+.login-container h1 { font-size: 1.8rem; margin-bottom: 8px; }
+.login-container p { color: var(--text-sub); margin-bottom: 24px; }
+.login-container input { 
+  width: 100%; padding: 16px; margin-bottom: 16px; border-radius: 14px; 
+  border: 2px solid var(--border); background: var(--surface); 
+  font-size: 1.1rem; text-align: center; outline: none;
+}
+.login-container input:focus { border-color: var(--accent); }
+.login-container button { width: 100%; padding: 16px; font-size: 1.1rem; }
+
+/* ユーザーバッジ */
+.user-badge { font-size: 0.8rem; color: var(--accent); font-weight: bold; margin-top: 2px; }
+
+/* カテゴリカード */
+.list-item {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--surface); margin-bottom: 12px; padding: 18px;
+  border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+  border: 1px solid rgba(0,0,0,0.01);
+}
+.list-item .info { display: flex; flex-direction: column; gap: 4px; }
+.list-item h3 { font-size: 1.15rem; display: flex; align-items: center; gap: 10px; }
+.list-item p { font-size: 0.85rem; color: var(--text-sub); }
+.list-item .count { 
+  font-size: 1.1rem; font-weight: bold; color: white;
+  padding: 4px 14px; border-radius: 20px; min-width: 45px; text-align: center;
+}
+
+/* アイテム行 */
+.detail-row { 
+  display: flex; align-items: center; gap: 16px; 
+  background: var(--surface); padding: 16px; margin-bottom: 10px; 
+  border-radius: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.01);
+}
+.detail-row input[type="checkbox"] { 
+  transform: scale(1.4); margin-left: 4px; 
+  accent-color: var(--accent);
+}
+.detail-info { flex: 1; }
+.detail-info h4 { font-size: 1.1rem; color: var(--text-main); }
+.detail-info p { font-size: 0.8rem; color: var(--text-sub); margin-top: 4px; }
+.detail-qty { font-size: 1.1rem; font-weight: bold; background: #f1f5f9; padding: 4px 10px; border-radius: 8px; }
+
+/* 一括操作バー */
+.edit-actions {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--border);
+}
+.select-all-label { display: flex; align-items: center; gap: 8px; font-weight: bold; font-size: 0.95rem; }
+.select-all-label input { transform: scale(1.2); accent-color: var(--accent); }
+#selected-count { font-size: 0.9rem; color: var(--text-sub); }
+
+/* 新着バッジ */
+.unread-badge {
+  background: var(--danger);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-left: 8px;
+  display: inline-block;
+  vertical-align: middle;
+  animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* 下部固定入力フォーム */
+.add-form {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  padding: 12px; 
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px; /* 要素間の隙間を少し詰めて余白を確保 */
+  align-items: center;
+  box-shadow: 0 -4px 10px rgba(0,0,0,0.03);
+  z-index: 100; /* 他の要素に隠されないように前面へ */
+}
+.add-form input[type="text"] {
+  flex: 1;
+  min-width: 0; /* 幅が狭くなっても崩れないための魔法の1行 */
+  padding: 12px;
+  border-radius: 12px; 
+  border: 1px solid var(--border);
+  background: #f8fafc; 
+  color: var(--text-main);
+  font-size: 1rem;
+  outline: none;
+}
+.add-form input[type="text"]:focus { border-color: var(--accent); background: #fff; }
+
+.qty-control { 
+  display: flex;
+  align-items: center;
+  background: #f1f5f9; 
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  flex-shrink: 0; /* 画面幅が狭くても絶対に形を崩さない */
+}
+.qty-control button { 
+  border: none;
+  background: transparent;
+  width: 44px;  /* モバイルの押しやすい幅に固定 */
+  height: 46px; /* 高さをしっかり確保 */
+  font-size: 1.3rem; /* 記号を少し大きく見やすく */
+  font-weight: bold;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.qty-control button:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+.qty-control span { 
+  font-weight: bold;
+  font-size: 1.1rem;
+  min-width: 24px; /* 2桁（10など）になってもズレない幅 */
+  text-align: center;
+}
+
+#add-btn {
+  flex-shrink: 0; /* 絶対に縮まない */
+  padding: 0 16px;
+  height: 46px; /* 数量ボタンと高さを統一 */
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: bold;
+}
+
+/* カテゴリの円形のドット記号 */
+.cat-dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; }
