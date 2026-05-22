@@ -8,23 +8,26 @@ const SUPABASE_ANON_KEY = 'sb_publishable_mclvJ1Tcf_e7lS3ufORyug_j7JZWn0G';
 const { createClient } = window.supabase;
 const dbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// 新しいカテゴリ構成に差し替え
 const CATEGORIES = [
-  { id: 'veg', name: '野菜', icon: '🥦', colorClass: 'c-veg', hex: '#2ecc71' },
+  { id: 'veg', name: '野菜系', icon: '🥦', colorClass: 'c-veg', hex: '#2ecc71' },
+  { id: 'fruit', name: '果物系', icon: '🍊', colorClass: 'c-fruit', hex: '#e67e22' },
   { id: 'meat', name: '肉類', icon: '🥩', colorClass: 'c-meat', hex: '#e74c3c' },
   { id: 'fish', name: '魚介', icon: '🐟', colorClass: 'c-fish', hex: '#3498db' },
-  { id: 'drink', name: '飲料', icon: '🥤', colorClass: 'c-drink', hex: '#1abc9c' },
-  { id: 'frozen', name: '冷凍食品', icon: '📦', colorClass: 'c-frozen', hex: '#9b59b6' },
-  { id: 'seasoning', name: '調味料', icon: '🧂', colorClass: 'c-seasoning', hex: '#f1c40f' },
-  { id: 'snack', name: 'お菓子', icon: '🍬', colorClass: 'c-snack', hex: '#e84393' },
-  { id: 'daily', name: '日用品', icon: '🧼', colorClass: 'c-daily', hex: '#a29bfe' },
+  { id: 'soy', name: '大豆製品', icon: '🫘', colorClass: 'c-soy', hex: '#a0522d' },
+  { id: 'egg_dairy', name: '卵・乳製品', icon: '🥚', colorClass: 'c-egg', hex: '#f1c40f' },
+  { id: 'grains', name: '穀類', icon: '🌾', colorClass: 'c-staple', hex: '#f39c12' },
+  { id: 'seasoning', name: '調味料', icon: '🧂', colorClass: 'c-seasoning', hex: '#9b59b6' },
+  { id: 'frozen', name: '冷凍食品', icon: '🧊', colorClass: 'c-frozen', hex: '#34495e' },
+  { id: 'daily', name: '日用品', icon: '🧼', colorClass: 'c-daily', hex: '#1abc9c' },
   { id: 'other', name: 'その他', icon: '🏷️', colorClass: 'c-other', hex: '#95a5a6' }
 ];
 
 let state = {
   password: localStorage.getItem('app_password') || '',
   userName: '',
-  items: [],       // 通常の買い物リスト
-  trashItems: [],  // ゴミ箱専用の独立した箱
+  items: [],
+  trashItems: [],
   currentCategory: null, 
   isEditMode: false,
   selectedIds: new Set(),
@@ -130,7 +133,7 @@ const renderCategoryList = () => {
   const scrollTop = container.scrollTop;
   container.innerHTML = '';
 
-  // 各カテゴリの品物数を計算し、件数が多い順（降順）に並び替える
+  // 品物数が多い順にカテゴリを並べ替え
   const sortedCategories = CATEGORIES.map(cat => {
     const catItems = state.items.filter(i => i.category === cat.name);
     return { ...cat, catItems, count: catItems.length };
