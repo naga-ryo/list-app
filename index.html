@@ -27,7 +27,7 @@
         <h1>買い物リスト</h1>
         <p id="user-badge" class="user-badge"></p>
       </div>
-      <button id="go-trash-btn" class="icon-btn">🗑️ ゴミ箱</button>
+      <button id="go-history-btn" class="icon-btn">🛒 購入履歴</button>
     </header>
     <div class="notice-bar">項目をタップすると、品物を追加・確認・削除できます</div>
     <div class="content" id="category-list"></div>
@@ -42,16 +42,22 @@
     
     <div id="edit-actions" class="edit-actions hidden">
       <label class="select-all-label">
-        <input type="checkbox" id="select-all-chk"> すべて選択
+        <input type="checkbox" id="select-all-chk"> すべて
       </label>
-      <span id="selected-count">0件選択中</span>
-      <button id="delete-selected-btn" class="danger-btn">ゴミ箱へ移動</button>
+      <span id="selected-count">0件</span>
+      <div style="display:flex; gap:8px;">
+        <button id="delete-selected-btn" class="secondary-btn" style="color:var(--danger); padding:8px 12px;">完全削除</button>
+        <button id="purchase-selected-btn" class="primary-btn" style="padding:8px 12px;">購入済にする</button>
+      </div>
     </div>
 
     <div class="content" id="item-list"></div>
 
     <div id="add-form" class="add-form">
-      <input type="text" id="new-item-name" placeholder="品物を入力...">
+      <div class="input-group">
+        <input type="text" id="new-item-name" placeholder="品物を入力...">
+        <input type="text" id="new-item-memo" placeholder="メモ (任意)">
+      </div>
       <div class="qty-control">
         <button id="qty-minus">-</button>
         <span id="qty-display">1</span>

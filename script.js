@@ -1,14 +1,12 @@
 // ==========================================
 // 1. 設定・初期化
 // ==========================================
-
 const SUPABASE_URL = 'https://yjtpmjhrjqbimcjztait.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_mclvJ1Tcf_e7lS3ufORyug_j7JZWn0G';
 
 const { createClient } = window.supabase;
 const dbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 新しいカテゴリ構成に差し替え
 const CATEGORIES = [
   { id: 'veg', name: '野菜系', icon: '🥦', colorClass: 'c-veg', hex: '#2ecc71' },
   { id: 'fruit', name: '果物系', icon: '🍊', colorClass: 'c-fruit', hex: '#e67e22' },
@@ -27,7 +25,7 @@ let state = {
   password: localStorage.getItem('app_password') || '',
   userName: '',
   items: [],
-  trashItems: [],
+  historyItems: [], 
   currentCategory: null, 
   isEditMode: false,
   selectedIds: new Set(),
@@ -56,7 +54,7 @@ const rpc = async (fnName, params = {}) => {
       showToast('認証セッションが切れました', 'error');
       throw new Error('Unauthorized');
     }
-    showToast('同期に失敗しました', 'error');
+    showToast('処理に失敗しました', 'error');
     throw error;
   }
   return data;
@@ -93,12 +91,12 @@ const fetchItems = async (isBackground = false) => {
     const itemsData = await rpc('get_items');
     state.items = itemsData || [];
     
-    if (state.currentCategory === 'trash') {
-      const trashData = await rpc('get_trash_items');
-      state.trashItems = trashData || [];
+    if (state.currentCategory === 'history') {
+      const historyData = await rpc('get_purchased_items');
+      state.historyItems = historyData || [];
     }
 
-    if (state.currentCategory && state.currentCategory !== 'trash') {
+    if (state.currentCategory && state.currentCategory !== 'history') {
       const currentItems = state.items.filter(i => i.category === state.currentCategory);
       currentItems.forEach(item => state.readItemIds.add(item.id));
       saveReadItems();
@@ -133,7 +131,6 @@ const renderCategoryList = () => {
   const scrollTop = container.scrollTop;
   container.innerHTML = '';
 
-  // 一番上に「すべての品物」カードを特別に作る
   const totalItemsCount = state.items.length;
   const hasAnyUnread = state.items.some(item => 
     !state.readItemIds.has(item.id) && item.created_by !== state.userName
@@ -142,12 +139,11 @@ const renderCategoryList = () => {
 
   const allDiv = document.createElement('div');
   allDiv.className = 'list-item';
-  allDiv.style.border = '2px solid var(--accent)'; // 特別感を出すために緑色の枠線をつける
+  allDiv.style.border = '2px solid var(--accent)';
   allDiv.onclick = () => {
     state.items.forEach(item => state.readItemIds.add(item.id));
     saveReadItems();
-    
-    state.currentCategory = 'all'; // 特殊なカテゴリ名として 'all' をセット
+    state.currentCategory = 'all'; 
     state.isEditMode = false;
     state.selectedIds.clear();
     fetchItems();
@@ -163,9 +159,7 @@ const renderCategoryList = () => {
     </div>
   `;
   container.appendChild(allDiv);
-  // 🔥 追加ここまで
 
-  // 品物数が多い順にカテゴリを並べ替え
   const sortedCategories = CATEGORIES.map(cat => {
     const catItems = state.items.filter(i => i.category === cat.name);
     return { ...cat, catItems, count: catItems.length };
@@ -188,7 +182,6 @@ const renderCategoryList = () => {
     div.onclick = () => {
       catItems.forEach(item => state.readItemIds.add(item.id));
       saveReadItems();
-      
       state.currentCategory = cat.name;
       state.isEditMode = false;
       state.selectedIds.clear();
@@ -225,27 +218,27 @@ const renderItemList = () => {
   const container = document.getElementById('item-list');
   const scrollTop = container.scrollTop;
   
-  const isTrash = state.currentCategory === 'trash';
+  const isHistory = state.currentCategory === 'history';
   const isAll = state.currentCategory === 'all';
   
-  // タイトルの出し分け
-  if (isTrash) document.getElementById('detail-title').textContent = '🗑️ ゴミ箱';
-  else if (isAll) document.getElementById('detail-title').textContent = '📋 すべての品物';
+  if (isHistory) document.getElementById('detail-title').textContent = '購入履歴';
+  else if (isAll) document.getElementById('detail-title').textContent = 'すべての品物';
   else document.getElementById('detail-title').textContent = state.currentCategory;
   
   const editBtn = document.getElementById('edit-mode-btn');
   const addForm = document.getElementById('add-form');
   const editActions = document.getElementById('edit-actions');
-  const delBtn = document.getElementById('delete-selected-btn');
 
-  if (isTrash || isAll) {
+  if (isHistory) {
+    editBtn.classList.add('hidden');
+    addForm.classList.add('hidden');
+    state.isEditMode = false;
+  } else if (isAll) {
     editBtn.classList.remove('hidden');
     addForm.classList.add('hidden');
-    delBtn.textContent = isTrash ? '完全に削除する' : 'ゴミ箱へ移動';
   } else {
     editBtn.classList.remove('hidden');
     addForm.classList.toggle('hidden', state.isEditMode);
-    delBtn.textContent = 'ゴミ箱へ移動';
   }
 
   editActions.classList.toggle('hidden', !state.isEditMode);
@@ -253,12 +246,10 @@ const renderItemList = () => {
 
   container.innerHTML = '';
   
-  // ターゲットアイテムの出し分け
   let targetItems;
-  if (isTrash) {
-    targetItems = state.trashItems;
+  if (isHistory) {
+    targetItems = state.historyItems;
   } else if (isAll) {
-    // アプリの一番上で定義されている「CATEGORIES」の並び順の通りに美しくソートする
     targetItems = [...state.items].sort((a, b) => {
       const indexA = CATEGORIES.findIndex(c => c.name === a.category);
       const indexB = CATEGORIES.findIndex(c => c.name === b.category);
@@ -269,19 +260,18 @@ const renderItemList = () => {
   }
 
   if (targetItems.length === 0) {
-    container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-sub);">品物はありません</div>`;
+    const msg = isHistory ? '購入済みの品物はありません' : '品物はありません';
+    container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-sub); font-size:0.95rem;">${msg}</div>`;
     return;
   }
 
-  // カテゴリの区切りを分かりやすくするための目印用変数
   let lastCategory = null;
 
   targetItems.forEach(item => {
-    // 「すべての品物」画面の時、カテゴリが変わる瞬間に小さな見出し（ヘッダー）を自動挿入する
+    // 購入履歴（isHistory）のときはカテゴリごとの区切り線を入れず、フラットに並べる
     if (isAll && item.category !== lastCategory) {
       lastCategory = item.category;
       const catObj = CATEGORIES.find(c => c.name === item.category);
-      
       const divider = document.createElement('div');
       divider.style = 'padding: 14px 4px 6px 4px; font-size: 0.85rem; font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 6px;';
       divider.innerHTML = `<span>${catObj ? catObj.icon : '🏷️'}</span> ${item.category}`;
@@ -290,7 +280,8 @@ const renderItemList = () => {
 
     const div = document.createElement('div');
     div.className = 'detail-row';
-    const timeStr = isTrash ? formatDate(item.deleted_at) : formatDate(item.created_at);
+    const timeStr = isHistory ? formatDate(item.purchased_at) : formatDate(item.created_at);
+    const actionLabel = isHistory ? '購入済' : '追加';
     
     let checkboxHtml = '';
     if (state.isEditMode) {
@@ -298,16 +289,19 @@ const renderItemList = () => {
       checkboxHtml = `<input type="checkbox" value="${item.id}" ${isChecked} onchange="toggleSelect('${item.id}', this.checked)">`;
     }
 
-    // カテゴリごとに設定されている固有の色（hex）を自動で引っ張ってきて、カラフルなバッジにする
     const catObj = CATEGORIES.find(c => c.name === item.category);
     const badgeColor = catObj ? catObj.hex : '#95a5a6';
-    const categoryBadge = isAll ? `<span style="font-size: 0.7rem; background: ${badgeColor}; color: white; padding: 2px 8px; border-radius: 20px; margin-left: 8px; font-weight: bold; vertical-align: middle;">${item.category}</span>` : '';
+    
+    // 購入履歴または「すべて」画面のときだけカテゴリバッジを表示
+    const categoryBadge = (isAll || isHistory) ? `<span style="font-size: 0.7rem; background: ${badgeColor}; color: white; padding: 2px 8px; border-radius: 20px; margin-left: 8px; font-weight: bold; vertical-align: middle;">${item.category}</span>` : '';
+    const memoHtml = item.memo ? `<div class="memo-text">📝 ${item.memo}</div>` : '';
 
     div.innerHTML = `
       ${checkboxHtml}
       <div class="detail-info" onclick="${state.isEditMode ? `document.querySelector('input[value=\"${item.id}\"]').click()` : ''}">
         <h4>${item.item_name} ${categoryBadge}</h4>
-        <p>追加: ${item.created_by} (${timeStr})</p>
+        ${memoHtml}
+        <p>${actionLabel}: ${item.created_by} (${timeStr})</p>
       </div>
       <div class="detail-qty">×${item.quantity}</div>
     `;
@@ -361,8 +355,8 @@ document.getElementById('back-btn').onclick = () => {
   fetchItems(true);
 };
 
-document.getElementById('go-trash-btn').onclick = () => {
-  state.currentCategory = 'trash';
+document.getElementById('go-history-btn').onclick = () => {
+  state.currentCategory = 'history';
   state.isEditMode = false;
   state.selectedIds.clear();
   fetchItems();
@@ -383,8 +377,11 @@ document.getElementById('qty-plus').onclick = () => {
 };
 
 document.getElementById('add-btn').onclick = async () => {
-  const input = document.getElementById('new-item-name');
-  const name = input.value.trim();
+  const nameInput = document.getElementById('new-item-name');
+  const memoInput = document.getElementById('new-item-memo');
+  const name = nameInput.value.trim();
+  const memo = memoInput.value.trim() || null;
+  
   if (!name) return;
 
   const btn = document.getElementById('add-btn');
@@ -394,10 +391,10 @@ document.getElementById('add-btn').onclick = async () => {
   try {
     await rpc('add_item', {
       p_item_name: name,
+      p_memo: memo,
       p_category: state.currentCategory,
       p_quantity: state.newQuantity
     });
-    
     dbClient.functions.invoke('line-notify', {
       body: { 
         user: state.userName, 
@@ -407,7 +404,8 @@ document.getElementById('add-btn').onclick = async () => {
       }
     }).catch(e => console.error('LINE通知の呼び出しに失敗:', e));
 
-    input.value = '';
+    nameInput.value = '';
+    memoInput.value = '';
     state.newQuantity = 1;
     document.getElementById('qty-display').textContent = '1';
     showToast('追加しました');
@@ -434,8 +432,9 @@ window.toggleSelect = (id, isChecked) => {
 };
 
 document.getElementById('select-all-chk').onchange = (e) => {
-  const isTrash = state.currentCategory === 'trash';
-  const targetItems = isTrash ? state.trashItems : state.items.filter(i => i.category === state.currentCategory);
+  const targetItems = state.currentCategory === 'all' 
+    ? state.items 
+    : state.items.filter(i => i.category === state.currentCategory);
   
   if (e.target.checked) targetItems.forEach(i => state.selectedIds.add(i.id));
   else state.selectedIds.clear();
@@ -443,23 +442,38 @@ document.getElementById('select-all-chk').onchange = (e) => {
 };
 
 const updateSelectCount = () => {
-  document.getElementById('selected-count').textContent = `${state.selectedIds.size}件選択中`;
+  document.getElementById('selected-count').textContent = `${state.selectedIds.size}件`;
+};
+
+// 購入済みにする際にも確認（Confirm）を挟むように変更
+document.getElementById('purchase-selected-btn').onclick = async () => {
+  if (state.selectedIds.size === 0) return;
+  
+  if (!confirm('選択した品物を購入済みにしますか？')) return;
+
+  const ids = Array.from(state.selectedIds);
+
+  try {
+    await rpc('mark_as_purchased', { p_item_ids: ids });
+    state.isEditMode = false;
+    state.selectedIds.clear();
+    showToast('購入済みにしました✨');
+    await fetchItems();
+  } catch (e) {
+  }
 };
 
 document.getElementById('delete-selected-btn').onclick = async () => {
   if (state.selectedIds.size === 0) return;
   const ids = Array.from(state.selectedIds);
-  const isTrash = state.currentCategory === 'trash';
-  const fn = isTrash ? 'delete_item_permanently' : 'move_to_trash';
-  const confirmMsg = isTrash ? '一括で完全に削除します。復元できませんがよろしいですか？' : '選択した品物をゴミ箱へ移動しますか？';
-
-  if (!confirm(confirmMsg)) return;
+  
+  if (!confirm('選択した品物を完全に削除します。よろしいですか？\n（履歴には残りません）')) return;
 
   try {
-    await rpc(fn, { p_item_ids: ids });
+    await rpc('delete_item_permanently', { p_item_ids: ids });
     state.isEditMode = false;
     state.selectedIds.clear();
-    showToast(isTrash ? '完全に削除しました' : 'ゴミ箱に移動しました');
+    showToast('完全に削除しました🗑️');
     await fetchItems();
   } catch (e) {
   }

@@ -234,3 +234,105 @@ button:active { opacity: 0.7; transform: scale(0.98); }
   font-size: 0.95rem;
   font-weight: bold;
 }
+
+/* メモ欄とフォームの追加スタイル */
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.input-group input[type="text"] {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  font-size: 1rem;
+  outline: none;
+}
+.input-group input[type="text"]:focus { 
+  border-color: var(--accent); 
+  background: #fff; 
+}
+#new-item-memo {
+  font-size: 0.85rem;
+  padding: 8px 10px;
+  background: #ffffff;
+}
+.memo-text {
+  font-size: 0.8rem;
+  color: #34495e;
+  background: #eef2f7;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+  display: inline-block;
+  word-break: break-all;
+}
+
+/* 詳細画面・購入履歴画面のヘッダーを絶対的な中央揃えにする設定 */
+#detail-view header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center; /* 全体を中央寄せのベースにする */
+  height: 60px;
+  padding: 0 16px;
+}
+
+#detail-view header h1 {
+  font-size: 1.2rem;
+  text-align: center;
+  max-width: 60%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0 auto;
+}
+
+/* 左右のボタンは絶対配置にしてタイトルの位置に影響を与えないようにする */
+#detail-view #back-btn {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+}
+
+#detail-view #edit-mode-btn {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+}
+
+/* 品物リストのテキスト溢れ・視認性対策 */
+.detail-info {
+  flex: 1;
+  min-width: 0; /* 文字溢れ防止の呪文 */
+  padding-right: 8px;
+}
+
+.detail-info h4 {
+  font-size: 1.05rem;
+  word-break: break-all; /* 長い名前でも自動改行 */
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.memo-text {
+  font-size: 0.8rem;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 4px 10px;
+  border-radius: 8px;
+  margin-top: 6px;
+  display: inline-block;
+  word-break: break-all;
+  border-left: 3px solid #cbd5e1; /* メモっぽさを出すアクセント線 */
+}
