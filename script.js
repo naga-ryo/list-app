@@ -329,12 +329,22 @@ document.getElementById('add-btn').onclick = async () => {
       p_quantity: state.newQuantity
     });
     
+    dbClient.functions.invoke('line-notify', {
+      body: { 
+        user: state.userName, 
+        category: state.currentCategory, 
+        itemName: name, 
+        quantity: state.newQuantity 
+      }
+    }).catch(e => console.error('LINE通知の呼び出しに失敗:', e));
+
     input.value = '';
     state.newQuantity = 1;
     document.getElementById('qty-display').textContent = '1';
     showToast('追加しました');
     await fetchItems();
   } catch(e) {
+    console.error(e);
   } finally {
     btn.disabled = false;
     btn.textContent = '追加';
