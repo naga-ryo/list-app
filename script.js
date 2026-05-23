@@ -268,7 +268,6 @@ const renderItemList = () => {
   let lastCategory = null;
 
   targetItems.forEach(item => {
-    // 購入履歴（isHistory）のときはカテゴリごとの区切り線を入れず、フラットに並べる
     if (isAll && item.category !== lastCategory) {
       lastCategory = item.category;
       const catObj = CATEGORIES.find(c => c.name === item.category);
@@ -280,8 +279,6 @@ const renderItemList = () => {
 
     const div = document.createElement('div');
     div.className = 'detail-row';
-    const timeStr = isHistory ? formatDate(item.purchased_at) : formatDate(item.created_at);
-    const actionLabel = isHistory ? '購入済' : '追加';
     
     let checkboxHtml = '';
     if (state.isEditMode) {
@@ -291,17 +288,34 @@ const renderItemList = () => {
 
     const catObj = CATEGORIES.find(c => c.name === item.category);
     const badgeColor = catObj ? catObj.hex : '#95a5a6';
-    
-    // 購入履歴または「すべて」画面のときだけカテゴリバッジを表示
     const categoryBadge = (isAll || isHistory) ? `<span style="font-size: 0.7rem; background: ${badgeColor}; color: white; padding: 2px 8px; border-radius: 20px; margin-left: 8px; font-weight: bold; vertical-align: middle;">${item.category}</span>` : '';
     const memoHtml = item.memo ? `<div class="memo-text">📝 ${item.memo}</div>` : '';
+
+    // 履歴画面かどうかで、表示する「人・時間」の情報を出し分ける
+    const createdTimeStr = formatDate(item.created_at);
+    let historyInfoHtml = '';
+    
+    if (isHistory) {
+      const purchasedTimeStr = formatDate(item.purchased_at);
+      const buyer = item.purchased_by || '不明'; // カラム追加前の古いデータは「不明」とする
+      historyInfoHtml = `
+        <div style="font-size: 0.75rem; color: var(--text-sub); margin-top: 6px; line-height: 1.5;">
+          <div style="color: var(--accent); font-weight: bold;">購入: ${buyer} (${purchasedTimeStr})</div>
+          <div>追加: ${item.created_by} (${createdTimeStr})</div>
+        </div>
+      `;
+    } else {
+      historyInfoHtml = `
+        <p style="font-size: 0.8rem; color: var(--text-sub); margin-top: 4px;">追加: ${item.created_by} (${createdTimeStr})</p>
+      `;
+    }
 
     div.innerHTML = `
       ${checkboxHtml}
       <div class="detail-info" onclick="${state.isEditMode ? `document.querySelector('input[value=\"${item.id}\"]').click()` : ''}">
         <h4>${item.item_name} ${categoryBadge}</h4>
         ${memoHtml}
-        <p>${actionLabel}: ${item.created_by} (${timeStr})</p>
+        ${historyInfoHtml}
       </div>
       <div class="detail-qty">×${item.quantity}</div>
     `;
