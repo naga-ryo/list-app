@@ -133,6 +133,38 @@ const renderCategoryList = () => {
   const scrollTop = container.scrollTop;
   container.innerHTML = '';
 
+  // 一番上に「すべての品物」カードを特別に作る
+  const totalItemsCount = state.items.length;
+  const hasAnyUnread = state.items.some(item => 
+    !state.readItemIds.has(item.id) && item.created_by !== state.userName
+  );
+  const allUnreadBadge = hasAnyUnread ? `<span class="unread-badge">New!</span>` : '';
+
+  const allDiv = document.createElement('div');
+  allDiv.className = 'list-item';
+  allDiv.style.border = '2px solid var(--accent)'; // 特別感を出すために緑色の枠線をつける
+  allDiv.onclick = () => {
+    state.items.forEach(item => state.readItemIds.add(item.id));
+    saveReadItems();
+    
+    state.currentCategory = 'all'; // 特殊なカテゴリ名として 'all' をセット
+    state.isEditMode = false;
+    state.selectedIds.clear();
+    fetchItems();
+  };
+  
+  allDiv.innerHTML = `
+    <div class="info">
+      <h3><span>📋</span> すべての品物 ${allUnreadBadge}</h3>
+      <p>全カテゴリの合算</p>
+    </div>
+    <div class="count" style="background-color: var(--text-main); opacity: ${totalItemsCount > 0 ? 1 : 0.4}">
+      ${totalItemsCount}
+    </div>
+  `;
+  container.appendChild(allDiv);
+  // 🔥 追加ここまで
+
   // 品物数が多い順にカテゴリを並べ替え
   const sortedCategories = CATEGORIES.map(cat => {
     const catItems = state.items.filter(i => i.category === cat.name);
@@ -194,17 +226,22 @@ const renderItemList = () => {
   const scrollTop = container.scrollTop;
   
   const isTrash = state.currentCategory === 'trash';
-  document.getElementById('detail-title').textContent = isTrash ? '🗑️ ゴミ箱' : state.currentCategory;
+  const isAll = state.currentCategory === 'all';
+  
+  // タイトルの出し分け
+  if (isTrash) document.getElementById('detail-title').textContent = '🗑️ ゴミ箱';
+  else if (isAll) document.getElementById('detail-title').textContent = '📋 すべての品物';
+  else document.getElementById('detail-title').textContent = state.currentCategory;
   
   const editBtn = document.getElementById('edit-mode-btn');
   const addForm = document.getElementById('add-form');
   const editActions = document.getElementById('edit-actions');
   const delBtn = document.getElementById('delete-selected-btn');
 
-  if (isTrash) {
+  if (isTrash || isAll) {
     editBtn.classList.remove('hidden');
     addForm.classList.add('hidden');
-    delBtn.textContent = '完全に削除する';
+    delBtn.textContent = isTrash ? '完全に削除する' : 'ゴミ箱へ移動';
   } else {
     editBtn.classList.remove('hidden');
     addForm.classList.toggle('hidden', state.isEditMode);
@@ -216,14 +253,41 @@ const renderItemList = () => {
 
   container.innerHTML = '';
   
-  let targetItems = isTrash ? state.trashItems : state.items.filter(i => i.category === state.currentCategory);
+  // ターゲットアイテムの出し分け
+  let targetItems;
+  if (isTrash) {
+    targetItems = state.trashItems;
+  } else if (isAll) {
+    // アプリの一番上で定義されている「CATEGORIES」の並び順の通りに美しくソートする
+    targetItems = [...state.items].sort((a, b) => {
+      const indexA = CATEGORIES.findIndex(c => c.name === a.category);
+      const indexB = CATEGORIES.findIndex(c => c.name === b.category);
+      return indexA - indexB;
+    });
+  } else {
+    targetItems = state.items.filter(i => i.category === state.currentCategory);
+  }
 
   if (targetItems.length === 0) {
     container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-sub);">品物はありません</div>`;
     return;
   }
 
+  // カテゴリの区切りを分かりやすくするための目印用変数
+  let lastCategory = null;
+
   targetItems.forEach(item => {
+    // 「すべての品物」画面の時、カテゴリが変わる瞬間に小さな見出し（ヘッダー）を自動挿入する
+    if (isAll && item.category !== lastCategory) {
+      lastCategory = item.category;
+      const catObj = CATEGORIES.find(c => c.name === item.category);
+      
+      const divider = document.createElement('div');
+      divider.style = 'padding: 14px 4px 6px 4px; font-size: 0.85rem; font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 6px;';
+      divider.innerHTML = `<span>${catObj ? catObj.icon : '🏷️'}</span> ${item.category}`;
+      container.appendChild(divider);
+    }
+
     const div = document.createElement('div');
     div.className = 'detail-row';
     const timeStr = isTrash ? formatDate(item.deleted_at) : formatDate(item.created_at);
@@ -234,10 +298,15 @@ const renderItemList = () => {
       checkboxHtml = `<input type="checkbox" value="${item.id}" ${isChecked} onchange="toggleSelect('${item.id}', this.checked)">`;
     }
 
+    // カテゴリごとに設定されている固有の色（hex）を自動で引っ張ってきて、カラフルなバッジにする
+    const catObj = CATEGORIES.find(c => c.name === item.category);
+    const badgeColor = catObj ? catObj.hex : '#95a5a6';
+    const categoryBadge = isAll ? `<span style="font-size: 0.7rem; background: ${badgeColor}; color: white; padding: 2px 8px; border-radius: 20px; margin-left: 8px; font-weight: bold; vertical-align: middle;">${item.category}</span>` : '';
+
     div.innerHTML = `
       ${checkboxHtml}
       <div class="detail-info" onclick="${state.isEditMode ? `document.querySelector('input[value=\"${item.id}\"]').click()` : ''}">
-        <h4>${item.item_name}</h4>
+        <h4>${item.item_name} ${categoryBadge}</h4>
         <p>追加: ${item.created_by} (${timeStr})</p>
       </div>
       <div class="detail-qty">×${item.quantity}</div>
