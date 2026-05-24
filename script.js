@@ -8,17 +8,17 @@ const { createClient } = window.supabase;
 const dbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const CATEGORIES = [
-  { id: 'veg', name: '野菜系', icon: '🥦', colorClass: 'c-veg', hex: '#2ecc71' },
-  { id: 'fruit', name: '果物系', icon: '🍊', colorClass: 'c-fruit', hex: '#e67e22' },
-  { id: 'meat', name: '肉類', icon: '🥩', colorClass: 'c-meat', hex: '#e74c3c' },
-  { id: 'fish', name: '魚介', icon: '🐟', colorClass: 'c-fish', hex: '#3498db' },
-  { id: 'soy', name: '大豆製品', icon: '🫘', colorClass: 'c-soy', hex: '#a0522d' },
-  { id: 'egg_dairy', name: '卵・乳製品', icon: '🥚', colorClass: 'c-egg', hex: '#f1c40f' },
-  { id: 'grains', name: '穀類', icon: '🌾', colorClass: 'c-staple', hex: '#f39c12' },
-  { id: 'seasoning', name: '調味料', icon: '🧂', colorClass: 'c-seasoning', hex: '#9b59b6' },
-  { id: 'frozen', name: '冷凍食品', icon: '🧊', colorClass: 'c-frozen', hex: '#34495e' },
-  { id: 'daily', name: '日用品', icon: '🧼', colorClass: 'c-daily', hex: '#1abc9c' },
-  { id: 'other', name: 'その他', icon: '🏷️', colorClass: 'c-other', hex: '#95a5a6' }
+  { id: 'veg', name: '野菜系', icon: '🥦', colorClass: 'c-veg', hex: '#2ecc71', textColor: '#ffffff' },
+  { id: 'fruit', name: '果物系', icon: '🍊', colorClass: 'c-fruit', hex: '#e67e22', textColor: '#ffffff' },
+  { id: 'meat', name: '肉類', icon: '🥩', colorClass: 'c-meat', hex: '#e74c3c', textColor: '#ffffff' },
+  { id: 'fish', name: '魚介', icon: '🐟', colorClass: 'c-fish', hex: '#3498db', textColor: '#ffffff' },
+  { id: 'soy', name: '大豆製品', icon: '🫘', colorClass: 'c-soy', hex: '#a0522d', textColor: '#ffffff' },
+  { id: 'egg_dairy', name: '卵・乳製品', icon: '🥚', colorClass: 'c-egg', hex: '#f1c40f', textColor: '#ffffff' },
+  { id: 'grains', name: '穀類', icon: '🌾', colorClass: 'c-staple', hex: '#f39c12', textColor: '#ffffff' },
+  { id: 'seasoning', name: '調味料', icon: '🧂', colorClass: 'c-seasoning', hex: '#9b59b6', textColor: '#ffffff' },
+  { id: 'frozen', name: '冷凍食品', icon: '🧊', colorClass: 'c-frozen', hex: '#34495e', textColor: '#ffffff' },
+  { id: 'daily', name: '日用品', icon: '🧼', colorClass: 'c-daily', hex: '#1abc9c', textColor: '#ffffff' },
+  { id: 'other', name: 'その他', icon: '🏷️', colorClass: 'c-other', hex: '#95a5a6', textColor: '#ffffff' }
 ];
 
 let state = {
@@ -124,6 +124,11 @@ const render = () => {
 };
 
 const renderCategoryList = () => {
+  // 💡 画面表示前にヘッダー色をリセット
+  const rootStyle = document.documentElement.style;
+  rootStyle.setProperty('--dynamic-header-bg', 'var(--surface)');
+  rootStyle.setProperty('--dynamic-header-text', 'var(--text-main)');
+
   document.getElementById('main-view').classList.remove('hidden');
   document.getElementById('user-badge').textContent = `ログイン中: ${state.userName}`;
   
@@ -214,12 +219,28 @@ const renderCategoryList = () => {
 };
 
 const renderItemList = () => {
+  const isHistory = state.currentCategory === 'history';
+  const isAll = state.currentCategory === 'all';
+  
+  const catObj = CATEGORIES.find(c => c.name === state.currentCategory);
+  const rootStyle = document.documentElement.style;
+  const addBtn = document.getElementById('add-btn');
+
+  if (!isHistory && !isAll && catObj) {
+    rootStyle.setProperty('--dynamic-header-bg', catObj.hex);
+    rootStyle.setProperty('--dynamic-header-text', catObj.textColor);
+    addBtn.style.backgroundColor = catObj.hex;
+    addBtn.style.color = catObj.textColor;
+  } else {
+    rootStyle.setProperty('--dynamic-header-bg', 'var(--surface)');
+    rootStyle.setProperty('--dynamic-header-text', 'var(--text-main)');
+    addBtn.style.backgroundColor = 'var(--accent)';
+    addBtn.style.color = '#ffffff';
+  }
+
   document.getElementById('detail-view').classList.remove('hidden');
   const container = document.getElementById('item-list');
   const scrollTop = container.scrollTop;
-  
-  const isHistory = state.currentCategory === 'history';
-  const isAll = state.currentCategory === 'all';
   
   if (isHistory) document.getElementById('detail-title').textContent = '購入履歴';
   else if (isAll) document.getElementById('detail-title').textContent = 'すべての品物';
@@ -270,15 +291,17 @@ const renderItemList = () => {
   targetItems.forEach(item => {
     if (isAll && item.category !== lastCategory) {
       lastCategory = item.category;
-      const catObj = CATEGORIES.find(c => c.name === item.category);
+      const cObj = CATEGORIES.find(c => c.name === item.category);
       const divider = document.createElement('div');
       divider.style = 'padding: 14px 4px 6px 4px; font-size: 0.85rem; font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 6px;';
-      divider.innerHTML = `<span>${catObj ? catObj.icon : '🏷️'}</span> ${item.category}`;
+      divider.innerHTML = `<span>${cObj ? cObj.icon : '🏷️'}</span> ${item.category}`;
       container.appendChild(divider);
     }
 
     const div = document.createElement('div');
-    div.className = 'detail-row';
+    // スワイプ可能にする条件：履歴画面ではなく、編集モードでもない時
+    const isSwipeable = !isHistory && !state.isEditMode;
+    div.className = isSwipeable ? 'swipe-container' : 'detail-row';
     
     let checkboxHtml = '';
     if (state.isEditMode) {
@@ -291,18 +314,18 @@ const renderItemList = () => {
     const categoryBadge = (isAll || isHistory) ? `<span style="font-size: 0.7rem; background: ${badgeColor}; color: white; padding: 2px 8px; border-radius: 20px; margin-left: 8px; font-weight: bold; vertical-align: middle;">${item.category}</span>` : '';
     const memoHtml = item.memo ? `<div class="memo-text">📝 ${item.memo}</div>` : '';
 
-    // 履歴画面かどうかで、表示する「人・時間」の情報を出し分ける
     const createdTimeStr = formatDate(item.created_at);
     let historyInfoHtml = '';
     
     if (isHistory) {
       const purchasedTimeStr = formatDate(item.purchased_at);
-      const buyer = item.purchased_by || '不明'; // カラム追加前の古いデータは「不明」とする
+      const buyer = item.purchased_by || '不明'; 
       historyInfoHtml = `
         <div style="font-size: 0.75rem; color: var(--text-sub); margin-top: 6px; line-height: 1.5;">
           <div style="color: var(--accent); font-weight: bold;">購入: ${buyer} (${purchasedTimeStr})</div>
           <div>追加: ${item.created_by} (${createdTimeStr})</div>
         </div>
+        <button class="repeat-btn" onclick="repeatItem('${item.id}', event)">🔄 もう一度買う</button>
       `;
     } else {
       historyInfoHtml = `
@@ -310,7 +333,8 @@ const renderItemList = () => {
       `;
     }
 
-    div.innerHTML = `
+    // 中身のコンテンツを作成
+    const innerContent = `
       ${checkboxHtml}
       <div class="detail-info" onclick="${state.isEditMode ? `document.querySelector('input[value=\"${item.id}\"]').click()` : ''}">
         <h4>${item.item_name} ${categoryBadge}</h4>
@@ -319,6 +343,19 @@ const renderItemList = () => {
       </div>
       <div class="detail-qty">×${item.quantity}</div>
     `;
+
+    if (isSwipeable) {
+      // スワイプ構造の中に中身を流し込む
+      div.innerHTML = `
+        <div class="swipe-bg swipe-left-bg">✅ 購入</div>
+        <div class="swipe-bg swipe-right-bg">🗑️ 削除</div>
+        <div class="swipe-content detail-row">${innerContent}</div>
+      `;
+      setupSwipe(div, item);
+    } else {
+      div.innerHTML = innerContent;
+    }
+
     container.appendChild(div);
   });
 
@@ -327,8 +364,79 @@ const renderItemList = () => {
 };
 
 // ==========================================
+// スワイプ機能のロジック
+// ==========================================
+const setupSwipe = (container, item) => {
+  const content = container.querySelector('.swipe-content');
+  let startX = 0, startY = 0, currentX = 0;
+  let isSwiping = false;
+
+  content.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    isSwiping = false;
+    content.style.transition = '';
+  }, { passive: true });
+
+  content.addEventListener('touchmove', e => {
+    const deltaX = e.touches[0].clientX - startX;
+    const deltaY = e.touches[0].clientY - startY;
+    // 縦スクロールの動きが強ければスワイプをキャンセル
+    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) return; 
+    
+    isSwiping = true;
+    currentX = deltaX;
+    if (currentX > 100) currentX = 100; // 右スワイプ上限（購入）
+    if (currentX < -100) currentX = -100; // 左スワイプ上限（削除）
+    content.style.transform = `translateX(${currentX}px)`;
+  }, { passive: true });
+
+  content.addEventListener('touchend', async () => {
+    if (!isSwiping) return;
+    content.style.transition = 'transform 0.3s ease';
+    
+    if (currentX > 70) {
+      content.style.transform = `translateX(100%)`;
+      if (confirm('購入済みにしますか？')) {
+        await rpc('mark_as_purchased', { p_item_ids: [item.id] });
+        showToast('購入済みにしました✨');
+        fetchItems();
+      } else {
+        content.style.transform = `translateX(0)`;
+      }
+    } else if (currentX < -70) {
+      content.style.transform = `translateX(-100%)`;
+      if (confirm('完全に削除しますか？')) {
+        await rpc('delete_item_permanently', { p_item_ids: [item.id] });
+        showToast('完全に削除しました🗑️');
+        fetchItems();
+      } else {
+        content.style.transform = `translateX(0)`;
+      }
+    } else {
+      content.style.transform = `translateX(0)`;
+    }
+  });
+};
+
+// ==========================================
 // 4. イベントハンドラ・各種アクション
 // ==========================================
+
+// 履歴からの再追加
+window.repeatItem = async (id, event) => {
+  if (event) event.stopPropagation();
+  const item = state.historyItems.find(i => i.id === id);
+  if (!item) return;
+  if (!confirm(`「${item.item_name}」をリストに再度追加しますか？`)) return;
+
+  try {
+    await rpc('add_item', { p_item_name: item.item_name, p_memo: item.memo, p_category: item.category, p_quantity: 1 });
+    showToast('リストに追加しました🔄');
+    fetchItems();
+  } catch (e) {}
+};
+
 document.getElementById('login-btn').onclick = async () => {
   const pass = document.getElementById('password-input').value.trim();
   if (!pass) return;
@@ -418,6 +526,9 @@ document.getElementById('add-btn').onclick = async () => {
       }
     }).catch(e => console.error('LINE通知の呼び出しに失敗:', e));
 
+    nameInput.blur();
+    memoInput.blur();
+
     nameInput.value = '';
     memoInput.value = '';
     state.newQuantity = 1;
@@ -459,7 +570,6 @@ const updateSelectCount = () => {
   document.getElementById('selected-count').textContent = `${state.selectedIds.size}件`;
 };
 
-// 購入済みにする際にも確認（Confirm）を挟むように変更
 document.getElementById('purchase-selected-btn').onclick = async () => {
   if (state.selectedIds.size === 0) return;
   
