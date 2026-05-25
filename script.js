@@ -377,12 +377,13 @@ const renderItemList = () => {
 const setupSwipe = (container, item) => {
   const content = container.querySelector('.swipe-content');
   const label = container.querySelector('.swipe-bg-label');
-  let startX = 0, currentX = 0, isSwiping = false;
+  let startX = 0, isSwiping = false;
 
   content.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
     isSwiping = false;
     container.style.transition = 'none';
+    content.style.transition = 'none';
   }, { passive: true });
 
   content.addEventListener('touchmove', e => {
@@ -390,13 +391,12 @@ const setupSwipe = (container, item) => {
     
     if (Math.abs(deltaX) > 10) {
       if (e.cancelable) e.preventDefault(); 
+      isSwiping = true;
     }
 
-    if (!isSwiping && Math.abs(deltaX) < 10) return;
-    isSwiping = true;
-    currentX = deltaX;
+    if (!isSwiping) return;
     
-    if (currentX > 0) { 
+    if (deltaX > 0) { 
       container.style.backgroundColor = '#2ecc71'; 
       label.textContent = "✅ 購入"; 
       label.style.justifyContent = "flex-start"; 
@@ -407,14 +407,18 @@ const setupSwipe = (container, item) => {
       label.style.justifyContent = "flex-end"; 
       label.style.opacity = 1;
     }
-    content.style.transform = `translateX(${currentX}px)`;
+    content.style.transform = `translateX(${deltaX}px)`;
   }, { passive: false });
 
-  content.addEventListener('touchend', () => {
+  const handleEnd = e => {
     if (!isSwiping) return;
-    content.style.transition = 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)';
     
-    if (currentX > 80) {
+    const endX = e.changedTouches[0].clientX;
+    const finalX = endX - startX;
+
+    content.style.transition = 'transform 0.2s cubic-bezier(0.2, 0, 0, 1)';
+    
+    if (finalX > 80) {
       content.style.transform = `translateX(100%)`;
       setTimeout(async () => {
         if (confirm('購入済みにしますか？')) {
@@ -423,7 +427,7 @@ const setupSwipe = (container, item) => {
           fetchItems();
         } else { resetSwipe(); }
       }, 100);
-    } else if (currentX < -80) {
+    } else if (finalX < -80) {
       content.style.transform = `translateX(-100%)`;
       setTimeout(async () => {
         if (confirm('完全に削除しますか？')) {
@@ -432,14 +436,20 @@ const setupSwipe = (container, item) => {
           fetchItems();
         } else { resetSwipe(); }
       }, 100);
-    } else { resetSwipe(); }
+    } else { 
+      resetSwipe(); 
+    }
 
     function resetSwipe() {
+      content.style.transition = 'transform 0.2s ease';
       content.style.transform = `translateX(0)`;
       container.style.backgroundColor = "var(--surface)";
       label.style.opacity = 0;
     }
-  });
+  };
+
+  content.addEventListener('touchend', handleEnd);
+  content.addEventListener('touchcancel', handleEnd);
 };
 
 // ==========================================
