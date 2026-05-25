@@ -387,23 +387,28 @@ const setupSwipe = (container, item) => {
 
   content.addEventListener('touchmove', e => {
     const deltaX = e.touches[0].clientX - startX;
+    
+    if (Math.abs(deltaX) > 10) {
+      if (e.cancelable) e.preventDefault(); 
+    }
+
     if (!isSwiping && Math.abs(deltaX) < 10) return;
     isSwiping = true;
     currentX = deltaX;
     
     if (currentX > 0) { 
-      container.style.backgroundColor = '#2ecc71';
+      container.style.backgroundColor = '#2ecc71'; 
       label.textContent = "✅ 購入"; 
       label.style.justifyContent = "flex-start"; 
       label.style.opacity = 1;
     } else { 
-      container.style.backgroundColor = '#e74c3c';
+      container.style.backgroundColor = '#e74c3c'; 
       label.textContent = "🗑️ 削除"; 
       label.style.justifyContent = "flex-end"; 
       label.style.opacity = 1;
     }
     content.style.transform = `translateX(${currentX}px)`;
-  }, { passive: true });
+  }, { passive: false });
 
   content.addEventListener('touchend', () => {
     if (!isSwiping) return;
