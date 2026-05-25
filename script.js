@@ -370,6 +370,69 @@ const renderItemList = () => {
   updateSelectCount();
 };
 
+window.showConfirm = (message) => {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.5); z-index: 10000;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.2s ease;
+    `;
+
+    const box = document.createElement('div');
+    box.style.cssText = `
+      background: var(--surface, #ffffff); padding: 24px; border-radius: 12px;
+      width: 80%; max-width: 320px; text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      transform: scale(0.9); transition: transform 0.2s ease;
+    `;
+
+    const msgDiv = document.createElement('div');
+    msgDiv.style.cssText = `margin-bottom: 24px; font-weight: bold; color: var(--text-main, #333); line-height: 1.5; white-space: pre-wrap;`;
+    msgDiv.textContent = message;
+
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = `display: flex; gap: 12px; justify-content: center;`;
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'キャンセル';
+    cancelBtn.style.cssText = `
+      padding: 12px 0; border: none; border-radius: 8px; width: 50%;
+      background: var(--border, #e0e0e0); color: var(--text-main, #333); font-weight: bold; cursor: pointer;
+    `;
+
+    const okBtn = document.createElement('button');
+    okBtn.textContent = 'OK';
+    okBtn.style.cssText = `
+      padding: 12px 0; border: none; border-radius: 8px; width: 50%;
+      background: var(--accent, #3498db); color: #fff; font-weight: bold; cursor: pointer;
+    `;
+
+    btnContainer.appendChild(cancelBtn);
+    btnContainer.appendChild(okBtn);
+    box.appendChild(msgDiv);
+    box.appendChild(btnContainer);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      box.style.transform = 'scale(1)';
+    });
+
+    const closeAndResolve = (result) => {
+      overlay.style.opacity = '0';
+      box.style.transform = 'scale(0.9)';
+      setTimeout(() => document.body.removeChild(overlay), 200);
+      resolve(result);
+    };
+
+    okBtn.onclick = () => closeAndResolve(true);
+    cancelBtn.onclick = () => closeAndResolve(false);
+  });
+};
+
 // ==========================================
 // スワイプ機能のロジック
 // ==========================================
@@ -426,7 +489,7 @@ const setupSwipe = (container, item) => {
         content.removeEventListener('transitionend', handler); 
         
         setTimeout(async () => {
-          if (confirm('購入済みにしますか？')) {
+          if (await window.showConfirm('購入済みにしますか？')) {
             container.style.display = 'none';
             await rpc('mark_as_purchased', { p_item_ids: [item.id] });
             fetchItems();
@@ -445,7 +508,7 @@ const setupSwipe = (container, item) => {
         content.removeEventListener('transitionend', handler);
         
         setTimeout(async () => {
-          if (confirm('完全に削除しますか？')) {
+          if (await window.showConfirm('完全に削除しますか？')) {
             container.style.display = 'none';
             await rpc('delete_item_permanently', { p_item_ids: [item.id] });
             fetchItems();
@@ -480,7 +543,7 @@ window.repeatItem = async (id, event) => {
   if (event) event.stopPropagation();
   const item = state.historyItems.find(i => i.id === id);
   if (!item) return;
-  if (!confirm(`「${item.item_name}」をリストに再度追加しますか？`)) return;
+  if (!(await window.showConfirm(`「${item.item_name}」をリストに再度追加しますか？`))) return;
 
   try {
     await rpc('add_item', { p_item_name: item.item_name, p_memo: item.memo, p_category: item.category, p_quantity: 1 });
@@ -636,7 +699,7 @@ const updateSelectCount = () => {
 document.getElementById('purchase-selected-btn').onclick = async () => {
   if (state.selectedIds.size === 0) return;
   
-  if (!confirm('選択した品物を購入済みにしますか？')) return;
+  if (!(await window.showConfirm('選択した品物を購入済みにしますか？'))) return;
 
   const ids = Array.from(state.selectedIds);
 
@@ -654,7 +717,7 @@ document.getElementById('delete-selected-btn').onclick = async () => {
   if (state.selectedIds.size === 0) return;
   const ids = Array.from(state.selectedIds);
   
-  if (!confirm('選択した品物を完全に削除します。よろしいですか？\n（履歴には残りません）')) return;
+  if (!(await window.showConfirm('選択した品物を完全に削除します。よろしいですか？\n（履歴には残りません）'))) return;
 
   try {
     await rpc('delete_item_permanently', { p_item_ids: ids });
