@@ -377,68 +377,66 @@ const renderItemList = () => {
 const setupSwipe = (container, item) => {
   const content = container.querySelector('.swipe-content');
   const label = container.querySelector('.swipe-bg-label');
-  let startX = 0, isSwiping = false;
+  
+  let startX = 0, startY = 0, currentX = 0, isSwiping = false;
 
   content.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
     isSwiping = false;
+    currentX = 0;
     container.style.transition = 'none';
     content.style.transition = 'none';
   }, { passive: true });
 
   content.addEventListener('touchmove', e => {
     const deltaX = e.touches[0].clientX - startX;
-    
-    if (Math.abs(deltaX) > 10) {
-      if (e.cancelable) e.preventDefault(); 
-      isSwiping = true;
-    }
+    const deltaY = e.touches[0].clientY - startY;
 
-    if (!isSwiping) return;
+    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) return;
+
+    if (e.cancelable) e.preventDefault();
     
-    if (deltaX > 0) { 
+    isSwiping = true;
+    currentX = deltaX;
+    
+    if (currentX > 0) { 
       container.style.backgroundColor = '#2ecc71'; 
-      label.textContent = "✅ 購入"; 
-      label.style.justifyContent = "flex-start"; 
+      label.textContent = "✅ 購入";
+      label.style.justifyContent = "flex-start";
       label.style.opacity = 1;
     } else { 
       container.style.backgroundColor = '#e74c3c'; 
-      label.textContent = "🗑️ 削除"; 
-      label.style.justifyContent = "flex-end"; 
+      label.textContent = "🗑️ 削除";
+      label.style.justifyContent = "flex-end";
       label.style.opacity = 1;
     }
-    content.style.transform = `translateX(${deltaX}px)`;
+    content.style.transform = `translateX(${currentX}px)`;
   }, { passive: false });
 
-  const handleEnd = e => {
+  content.addEventListener('touchend', () => {
     if (!isSwiping) return;
+    content.style.transition = 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)';
     
-    const endX = e.changedTouches[0].clientX;
-    const finalX = endX - startX;
-
-    content.style.transition = 'transform 0.2s cubic-bezier(0.2, 0, 0, 1)';
-    
-    if (finalX > 80) {
+    if (currentX > 80) {
       content.style.transform = `translateX(100%)`;
       setTimeout(async () => {
         if (confirm('購入済みにしますか？')) {
           container.style.display = 'none';
-          await rpc('mark_as_purchased', { p_item_ids: [item.id] }); 
+          await rpc('mark_as_purchased', { p_item_ids: [item.id] });
           fetchItems();
         } else { resetSwipe(); }
       }, 100);
-    } else if (finalX < -80) {
+    } else if (currentX < -80) {
       content.style.transform = `translateX(-100%)`;
       setTimeout(async () => {
         if (confirm('完全に削除しますか？')) {
           container.style.display = 'none';
-          await rpc('delete_item_permanently', { p_item_ids: [item.id] }); 
+          await rpc('delete_item_permanently', { p_item_ids: [item.id] });
           fetchItems();
         } else { resetSwipe(); }
       }, 100);
-    } else { 
-      resetSwipe(); 
-    }
+    } else { resetSwipe(); }
 
     function resetSwipe() {
       content.style.transition = 'transform 0.2s ease';
@@ -446,10 +444,7 @@ const setupSwipe = (container, item) => {
       container.style.backgroundColor = "var(--surface)";
       label.style.opacity = 0;
     }
-  };
-
-  content.addEventListener('touchend', handleEnd);
-  content.addEventListener('touchcancel', handleEnd);
+  });
 };
 
 // ==========================================
