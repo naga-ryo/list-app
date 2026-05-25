@@ -124,7 +124,6 @@ const render = () => {
 };
 
 const renderCategoryList = () => {
-  // 💡 画面表示前にヘッダー色をリセット
   const rootStyle = document.documentElement.style;
   rootStyle.setProperty('--dynamic-header-bg', 'var(--surface)');
   rootStyle.setProperty('--dynamic-header-text', 'var(--text-main)');
@@ -297,7 +296,7 @@ const renderItemList = () => {
         lastDate = dateStr;
         const divider = document.createElement('div');
         divider.style = 'padding: 16px 8px 8px; font-weight: bold; border-bottom: 2px dashed var(--border); margin-bottom: 10px; color: var(--text-main); font-size: 0.9rem;';
-        divider.innerHTML = `📅 ${dateStr}`;
+        divider.innerHTML = `🗓️ ${dateStr}`;
         container.appendChild(divider);
       }
     }
@@ -421,34 +420,43 @@ const setupSwipe = (container, item) => {
     if (currentX > 80) {
       content.style.transition = 'transform 0.2s ease';
       content.style.transform = `translateX(100%)`; 
-
-      setTimeout(async () => {
-        if (confirm('購入済みにしますか？')) {
-          container.style.display = 'none';
-          await rpc('mark_as_purchased', { p_item_ids: [item.id] });
-          fetchItems();
-        } else {
-          resetSwipe();
-        }
-      }, 200);
+      
+      content.addEventListener('transitionend', function handler(e) {
+        if (e.propertyName !== 'transform') return;
+        content.removeEventListener('transitionend', handler); 
+        
+        setTimeout(async () => {
+          if (confirm('購入済みにしますか？')) {
+            container.style.display = 'none';
+            await rpc('mark_as_purchased', { p_item_ids: [item.id] });
+            fetchItems();
+          } else {
+            resetSwipe();
+          }
+        }, 10);
+      });
 
     } else if (currentX < -80) {
-
       content.style.transition = 'transform 0.2s ease';
       content.style.transform = `translateX(-100%)`; 
       
-      setTimeout(async () => {
-        if (confirm('完全に削除しますか？')) {
-          container.style.display = 'none';
-          await rpc('delete_item_permanently', { p_item_ids: [item.id] });
-          fetchItems();
-        } else {
-          resetSwipe();
-        }
-      }, 200);
+      content.addEventListener('transitionend', function handler(e) {
+        if (e.propertyName !== 'transform') return;
+        content.removeEventListener('transitionend', handler);
+        
+        setTimeout(async () => {
+          if (confirm('完全に削除しますか？')) {
+            container.style.display = 'none';
+            await rpc('delete_item_permanently', { p_item_ids: [item.id] });
+            fetchItems();
+          } else {
+            resetSwipe();
+          }
+        }, 10);
+      });
 
     } else {
-      resetSwipe();
+      resetSwipe(); 
     }
 
     function resetSwipe() {
