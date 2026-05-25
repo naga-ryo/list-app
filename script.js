@@ -287,8 +287,20 @@ const renderItemList = () => {
   }
 
   let lastCategory = null;
+  let lastDate = null;
 
   targetItems.forEach(item => {
+    if (isHistory && item.purchased_at) {
+      const d = new Date(item.purchased_at);
+      const dateStr = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+      if (dateStr !== lastDate) {
+        lastDate = dateStr;
+        const divider = document.createElement('div');
+        divider.style = 'padding: 16px 8px 8px; font-weight: bold; border-bottom: 2px dashed var(--border); margin-bottom: 10px; color: var(--text-main); font-size: 0.9rem;';
+        divider.innerHTML = `📅 ${dateStr}`;
+        container.appendChild(divider);
+      }
+    }
     if (isAll && item.category !== lastCategory) {
       lastCategory = item.category;
       const cObj = CATEGORIES.find(c => c.name === item.category);
@@ -346,11 +358,7 @@ const renderItemList = () => {
 
     if (isSwipeable) {
       // スワイプ構造の中に中身を流し込む
-      div.innerHTML = `
-        <div class="swipe-bg swipe-left-bg">✅ 購入</div>
-        <div class="swipe-bg swipe-right-bg">🗑️ 削除</div>
-        <div class="swipe-content detail-row">${innerContent}</div>
-      `;
+      div.innerHTML = `<div class="swipe-bg-label"></div><div class="swipe-content detail-row">${innerContent}</div>`;
       setupSwipe(div, item);
     } else {
       div.innerHTML = innerContent;
@@ -368,53 +376,63 @@ const renderItemList = () => {
 // ==========================================
 const setupSwipe = (container, item) => {
   const content = container.querySelector('.swipe-content');
-  let startX = 0, startY = 0, currentX = 0;
-  let isSwiping = false;
+  const label = container.querySelector('.swipe-bg-label');
+  let startX = 0, currentX = 0, isSwiping = false;
 
   content.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
     isSwiping = false;
-    content.style.transition = '';
+    container.style.transition = 'none';
   }, { passive: true });
 
   content.addEventListener('touchmove', e => {
     const deltaX = e.touches[0].clientX - startX;
-    const deltaY = e.touches[0].clientY - startY;
-    // 縦スクロールの動きが強ければスワイプをキャンセル
-    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) return; 
-    
+    if (!isSwiping && Math.abs(deltaX) < 10) return;
     isSwiping = true;
     currentX = deltaX;
-    if (currentX > 100) currentX = 100; // 右スワイプ上限（購入）
-    if (currentX < -100) currentX = -100; // 左スワイプ上限（削除）
+    
+    if (currentX > 0) { 
+      container.style.backgroundColor = '#2ecc71';
+      label.textContent = "✅ 購入"; 
+      label.style.justifyContent = "flex-start"; 
+      label.style.opacity = 1;
+    } else { 
+      container.style.backgroundColor = '#e74c3c';
+      label.textContent = "🗑️ 削除"; 
+      label.style.justifyContent = "flex-end"; 
+      label.style.opacity = 1;
+    }
     content.style.transform = `translateX(${currentX}px)`;
   }, { passive: true });
 
-  content.addEventListener('touchend', async () => {
+  content.addEventListener('touchend', () => {
     if (!isSwiping) return;
-    content.style.transition = 'transform 0.3s ease';
+    content.style.transition = 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)';
     
-    if (currentX > 70) {
+    if (currentX > 80) {
       content.style.transform = `translateX(100%)`;
-      if (confirm('購入済みにしますか？')) {
-        await rpc('mark_as_purchased', { p_item_ids: [item.id] });
-        showToast('購入済みにしました✨');
-        fetchItems();
-      } else {
-        content.style.transform = `translateX(0)`;
-      }
-    } else if (currentX < -70) {
+      setTimeout(async () => {
+        if (confirm('購入済みにしますか？')) {
+          container.style.display = 'none';
+          await rpc('mark_as_purchased', { p_item_ids: [item.id] }); 
+          fetchItems();
+        } else { resetSwipe(); }
+      }, 100);
+    } else if (currentX < -80) {
       content.style.transform = `translateX(-100%)`;
-      if (confirm('完全に削除しますか？')) {
-        await rpc('delete_item_permanently', { p_item_ids: [item.id] });
-        showToast('完全に削除しました🗑️');
-        fetchItems();
-      } else {
-        content.style.transform = `translateX(0)`;
-      }
-    } else {
+      setTimeout(async () => {
+        if (confirm('完全に削除しますか？')) {
+          container.style.display = 'none';
+          await rpc('delete_item_permanently', { p_item_ids: [item.id] }); 
+          fetchItems();
+        } else { resetSwipe(); }
+      }, 100);
+    } else { resetSwipe(); }
+
+    function resetSwipe() {
       content.style.transform = `translateX(0)`;
+      container.style.backgroundColor = "var(--surface)";
+      label.style.opacity = 0;
     }
   });
 };
@@ -432,10 +450,21 @@ window.repeatItem = async (id, event) => {
 
   try {
     await rpc('add_item', { p_item_name: item.item_name, p_memo: item.memo, p_category: item.category, p_quantity: 1 });
+    
+    dbClient.functions.invoke('line-notify', {
+      body: { 
+        user: state.userName, 
+        category: item.category, 
+        itemName: item.item_name, 
+        quantity: 1 
+      }
+    }).catch(e => console.error('LINE通知の呼び出しに失敗:', e));
+
     showToast('リストに追加しました🔄');
     fetchItems();
   } catch (e) {}
 };
+
 
 document.getElementById('login-btn').onclick = async () => {
   const pass = document.getElementById('password-input').value.trim();
