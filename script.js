@@ -378,11 +378,16 @@ const setupSwipe = (container, item) => {
   const content = container.querySelector('.swipe-content');
   const label = container.querySelector('.swipe-bg-label');
   
+  content.style.touchAction = 'pan-y'; 
+  
   let startX = 0, startY = 0, currentX = 0, isSwiping = false;
 
   content.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
+    
+    if (startX < 30 || startX > window.innerWidth - 30) return;
+
     isSwiping = false;
     currentX = 0;
     container.style.transition = 'none';
@@ -390,15 +395,17 @@ const setupSwipe = (container, item) => {
   }, { passive: true });
 
   content.addEventListener('touchmove', e => {
+    if (!startX) return;
+
     const deltaX = e.touches[0].clientX - startX;
     const deltaY = e.touches[0].clientY - startY;
 
     if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) return;
 
-    if (e.cancelable) e.preventDefault();
-    
     isSwiping = true;
     currentX = deltaX;
+
+    if (e.cancelable) e.preventDefault();
     
     if (currentX > 0) { 
       container.style.backgroundColor = '#2ecc71'; 
@@ -414,7 +421,7 @@ const setupSwipe = (container, item) => {
     content.style.transform = `translateX(${currentX}px)`;
   }, { passive: false });
 
-  content.addEventListener('touchend', () => {
+  const handleEnd = () => {
     if (!isSwiping) return;
     content.style.transition = 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)';
     
@@ -443,8 +450,13 @@ const setupSwipe = (container, item) => {
       content.style.transform = `translateX(0)`;
       container.style.backgroundColor = "var(--surface)";
       label.style.opacity = 0;
+      startX = 0;
+      isSwiping = false;
     }
-  });
+  };
+
+  content.addEventListener('touchend', handleEnd);
+  content.addEventListener('touchcancel', handleEnd);
 };
 
 // ==========================================
