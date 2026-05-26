@@ -370,8 +370,9 @@ const renderItemList = () => {
   updateSelectCount();
 };
 
-window.showConfirm = (message) => {
+window.showConfirm = (message, isDelete = false) => {
   return new Promise((resolve) => {
+
     const overlay = document.createElement('div');
     overlay.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -402,11 +403,12 @@ window.showConfirm = (message) => {
       background: var(--border, #e0e0e0); color: var(--text-main, #333); font-weight: bold; cursor: pointer;
     `;
 
+    const okColor = isDelete ? 'var(--danger, #e74c3c)' : 'var(--accent, #2ecc71)';
     const okBtn = document.createElement('button');
-    okBtn.textContent = 'OK';
+    okBtn.textContent = isDelete ? '削除' : 'OK';
     okBtn.style.cssText = `
       padding: 12px 0; border: none; border-radius: 8px; width: 50%;
-      background: var(--accent, #3498db); color: #fff; font-weight: bold; cursor: pointer;
+      background: ${okColor}; color: #fff; font-weight: bold; cursor: pointer;
     `;
 
     btnContainer.appendChild(cancelBtn);
@@ -508,7 +510,7 @@ const setupSwipe = (container, item) => {
         content.removeEventListener('transitionend', handler);
         
         setTimeout(async () => {
-          if (await window.showConfirm('完全に削除しますか？')) {
+          if (await window.showConfirm('完全に削除しますか？', true)) {
             container.style.display = 'none';
             await rpc('delete_item_permanently', { p_item_ids: [item.id] });
             fetchItems();
@@ -717,7 +719,7 @@ document.getElementById('delete-selected-btn').onclick = async () => {
   if (state.selectedIds.size === 0) return;
   const ids = Array.from(state.selectedIds);
   
-  if (!(await window.showConfirm('選択した品物を完全に削除します。よろしいですか？\n（履歴には残りません）'))) return;
+  if (!(await window.showConfirm('選択した品物を完全に削除します。よろしいですか？\n（履歴には残りません）', true))) return;
 
   try {
     await rpc('delete_item_permanently', { p_item_ids: ids });
