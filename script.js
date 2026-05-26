@@ -30,7 +30,9 @@ let state = {
   isEditMode: false,
   selectedIds: new Set(),
   newQuantity: 1,
-  readItemIds: new Set(JSON.parse(localStorage.getItem('app_read_items')) || [])
+  readItemIds: new Set(JSON.parse(localStorage.getItem('app_read_items')) || []),
+  isTransitioning: false,
+  isSwiping: false // 💡 追加: スワイプ中の自動再描画を防ぐためのフラグ
 };
 
 let syncInterval = null;
@@ -43,6 +45,36 @@ const showToast = (msg, type = 'success') => {
   toast.textContent = msg;
   toast.className = `toast ${type}`;
   setTimeout(() => toast.classList.add('hidden'), 2500);
+};
+
+window.showAlert = (message) => {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; padding: 20px;`;
+    
+    const box = document.createElement('div');
+    box.style.cssText = `background: var(--surface); padding: 24px; border-radius: 16px; width: 100%; max-width: 320px; text-align: center; transform: translateY(20px); transition: transform 0.2s; box-shadow: 0 10px 25px rgba(0,0,0,0.2);`;
+    
+    box.innerHTML = `
+      <h3 style="color: var(--danger); font-size: 1.1rem; margin-bottom: 16px;">⚠️ エラー</h3>
+      <p style="margin-bottom: 24px; font-size: 0.95rem; color: var(--text-main); line-height: 1.5;">${message}</p>
+    `;
+
+    const btn = document.createElement('button');
+    btn.textContent = 'OK';
+    btn.className = 'primary-btn';
+    btn.style.width = '100%';
+    btn.onclick = () => {
+      overlay.style.opacity = '0';
+      setTimeout(() => { document.body.removeChild(overlay); resolve(); }, 200);
+    };
+
+    box.appendChild(btn);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => { overlay.style.opacity = '1'; box.style.transform = 'translateY(0)'; });
+  });
 };
 
 const rpc = async (fnName, params = {}) => {
@@ -81,7 +113,7 @@ const saveReadItems = () => {
 // ==========================================
 // 3. データ取得と画面描画
 // ==========================================
-const fetchItems = async (isBackground = false) => {
+const fetchItems = async (isSilent = false) => {
   if (!state.userName) return;
   try {
     const itemsData = await rpc('get_items');
@@ -98,9 +130,23 @@ const fetchItems = async (isBackground = false) => {
       saveReadItems();
     }
 
-    if (!state.isEditMode) render();
+    // 💡 修正: ダイアログが開いているか判定する超安全な記述
+    const hasOpenDialog = document.querySelector('div[style*="z-index: 10000"]') !== null;
+    state.isTransitioning = false;
+
+    // ダイアログが開いていない時だけ画面を再描画する
+    if (!state.isEditMode && !state.isSwiping && !hasOpenDialog) {
+      render();
+    }
   } catch (e) {
     console.error(e);
+    
+    const hasOpenDialog = document.querySelector('div[style*="z-index: 10000"]') !== null;
+    state.isTransitioning = false;
+    
+    if (!state.isEditMode && !state.isSwiping && !hasOpenDialog) {
+      render();
+    }
   }
 };
 
@@ -147,7 +193,10 @@ const renderCategoryList = () => {
     state.currentCategory = 'all'; 
     state.isEditMode = false;
     state.selectedIds.clear();
-    fetchItems();
+    
+    state.isTransitioning = true;
+    render(); 
+    fetchItems(true);
   };
   
   allDiv.innerHTML = `
@@ -186,7 +235,10 @@ const renderCategoryList = () => {
       state.currentCategory = cat.name;
       state.isEditMode = false;
       state.selectedIds.clear();
-      fetchItems();
+
+      state.isTransitioning = true;
+      render(); 
+      fetchItems(true);
     };
     
     div.innerHTML = `
@@ -260,6 +312,15 @@ const renderItemList = () => {
 
   editActions.classList.toggle('hidden', !state.isEditMode);
   editBtn.textContent = state.isEditMode ? '完了' : '編集';
+
+  if (state.isTransitioning) {
+    container.innerHTML = `
+      <div class="skeleton-item"><div class="skeleton-content"><div class="skeleton-text"></div><div class="skeleton-text short"></div></div></div>
+      <div class="skeleton-item"><div class="skeleton-content"><div class="skeleton-text"></div><div class="skeleton-text short"></div></div></div>
+      <div class="skeleton-item"><div class="skeleton-content"><div class="skeleton-text"></div><div class="skeleton-text short"></div></div></div>
+    `;
+    return; 
+  }
 
   container.innerHTML = '';
   
@@ -346,19 +407,14 @@ const renderItemList = () => {
     
     if (isHistory) {
       const buyer = item.purchased_by || '不明'; 
-      let daysLaterStr = '';
-      if (item.created_at && item.purchased_at) {
-        const cZero = new Date(new Date(item.created_at).setHours(0, 0, 0, 0)).getTime();
-        const pZero = new Date(new Date(item.purchased_at).setHours(0, 0, 0, 0)).getTime();
-        const diffDays = Math.floor((pZero - cZero) / (1000 * 60 * 60 * 24));
-        daysLaterStr = diffDays <= 0 ? ' (同日)' : ` (追加から${diffDays}日後)`;
-      }
+      const priceText = (item.price != null && item.price !== '') ? `${item.price}円` : '---円';
 
+      // 💡 修正：「もう一度買う」ボタンのテキストをなくし、1行にまとめて縦伸びを解消しました
       historyInfoHtml = `
-        <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 4px;">
-          購入: ${buyer}${daysLaterStr}
+        <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 4px; display: flex; align-items: center; gap: 8px;">
+          <span>購入: ${buyer} / 金額: ${priceText}</span>
+          <button class="repeat-btn" onclick="repeatItem('${item.id}', event)" title="もう一度買う">🔄</button>
         </div>
-        <button class="repeat-btn" onclick="repeatItem('${item.id}', event)">🔄 再追加</button>
       `;
     } else {
       const createdTimeStr = formatDate(item.created_at);
@@ -391,8 +447,11 @@ const renderItemList = () => {
   updateSelectCount();
 };
 
-window.showConfirm = (message, isDelete = false) => {
+window.showConfirm = (message, options = {}) => {
   return new Promise((resolve) => {
+    const isDanger = typeof options === 'boolean' ? options : (options.isDanger || false);
+    const withPrice = typeof options === 'boolean' ? false : (options.withPrice || false);
+
     const overlay = document.createElement('div');
     overlay.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -412,6 +471,16 @@ window.showConfirm = (message, isDelete = false) => {
     const msgDiv = document.createElement('div');
     msgDiv.style.cssText = `margin-bottom: 24px; font-weight: bold; color: var(--text-main, #333); line-height: 1.5; white-space: pre-wrap;`;
     msgDiv.textContent = message;
+    box.appendChild(msgDiv);
+
+    let inputField = null;
+    if (withPrice) {
+      inputField = document.createElement('input');
+      inputField.type = 'tel';
+      inputField.placeholder = '金額を入力...（任意）';
+      inputField.style.cssText = `width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; font-size: 1.1rem; text-align: center; outline: none; background: #f8fafc;`;
+      box.appendChild(inputField);
+    }
 
     const btnContainer = document.createElement('div');
     btnContainer.style.cssText = `display: flex; gap: 12px; justify-content: center;`;
@@ -423,9 +492,9 @@ window.showConfirm = (message, isDelete = false) => {
       background: var(--border, #e0e0e0); color: var(--text-main, #333); font-weight: bold; cursor: pointer;
     `;
 
-    const okColor = isDelete ? 'var(--danger, #e74c3c)' : 'var(--accent, #2ecc71)';
+    const okColor = isDanger ? 'var(--danger, #e74c3c)' : 'var(--accent, #2ecc71)';
     const okBtn = document.createElement('button');
-    okBtn.textContent = isDelete ? '削除' : 'OK';
+    okBtn.textContent = isDanger ? '削除' : 'OK';
     okBtn.style.cssText = `
       padding: 12px 0; border: none; border-radius: 8px; width: 50%;
       background: ${okColor}; color: #fff; font-weight: bold; cursor: pointer;
@@ -433,7 +502,6 @@ window.showConfirm = (message, isDelete = false) => {
 
     btnContainer.appendChild(cancelBtn);
     btnContainer.appendChild(okBtn);
-    box.appendChild(msgDiv);
     box.appendChild(btnContainer);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
@@ -441,6 +509,7 @@ window.showConfirm = (message, isDelete = false) => {
     requestAnimationFrame(() => {
       overlay.style.opacity = '1';
       box.style.transform = 'scale(1)';
+      if (inputField) inputField.focus();
     });
 
     const closeAndResolve = (result) => {
@@ -450,8 +519,108 @@ window.showConfirm = (message, isDelete = false) => {
       resolve(result);
     };
 
-    okBtn.onclick = () => closeAndResolve(true);
-    cancelBtn.onclick = () => closeAndResolve(false);
+    okBtn.onclick = async () => {
+      if (withPrice) {
+        const val = inputField.value.trim();
+        if (val !== '' && !/^[0-9]+$/.test(val)) {
+          await window.showAlert('数字以外のものが入力されています。<br>半角数字のみで入力してください。');
+          return; 
+        }
+        closeAndResolve({ confirmed: true, price: val !== '' ? parseInt(val, 10) : null });
+      } else {
+        closeAndResolve(true);
+      }
+    };
+    
+    cancelBtn.onclick = () => closeAndResolve(withPrice ? { confirmed: false } : false);
+  });
+};
+
+window.showMultiPurchasePrompt = (items) => {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; padding: 20px;`;
+    
+    const mainBox = document.createElement('div');
+    mainBox.style.cssText = `background: var(--surface); padding: 24px; border-radius: 16px; width: 100%; max-width: 320px; text-align: center; transform: translateY(20px); transition: transform 0.2s; box-shadow: 0 10px 25px rgba(0,0,0,0.2);`;
+    mainBox.innerHTML = `<p style="margin-bottom: 24px; font-weight: bold; font-size: 0.95rem;">選択した品物を購入済みにしますか？</p>`;
+
+    const mainBtnContainer = document.createElement('div');
+    mainBtnContainer.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'キャンセル'; cancelBtn.className = 'secondary-btn'; cancelBtn.style.flex = '1';
+
+    const priceBtn = document.createElement('button');
+    priceBtn.textContent = '各金額を入力 (任意)'; priceBtn.className = 'secondary-btn'; priceBtn.style.width = '100%'; priceBtn.style.order = '-1'; priceBtn.style.marginBottom = '4px';
+
+    const okBtn = document.createElement('button');
+    okBtn.textContent = 'OK'; okBtn.className = 'primary-btn'; okBtn.style.flex = '1';
+
+    mainBtnContainer.append(priceBtn, cancelBtn, okBtn);
+    mainBox.appendChild(mainBtnContainer);
+
+    const priceBox = document.createElement('div');
+    priceBox.style.cssText = `display: none; background: var(--surface); padding: 24px; border-radius: 16px; width: 100%; max-width: 320px; text-align: center; transform: translateY(20px); transition: transform 0.2s; box-shadow: 0 10px 25px rgba(0,0,0,0.2);`;
+    
+    let listHtml = items.map(item => `
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; text-align: left;">
+        <span style="font-size: 0.9rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px; font-weight:bold;">${item.item_name}</span>
+        <input type="tel" id="price-input-${item.id}" placeholder="---" style="width: 80px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; text-align: right; outline: none;">
+        <span style="font-size:0.9rem; margin-left:4px; font-weight:bold;">円</span>
+      </div>
+    `).join('');
+
+    priceBox.innerHTML = `<h3 style="margin-bottom: 16px;">💰 各金額を入力</h3><div style="max-height: 40vh; overflow-y: auto; margin-bottom: 16px; padding-right: 4px;">${listHtml}</div>`;
+
+    const backBtn = document.createElement('button');
+    backBtn.textContent = '確認画面に戻る';
+    backBtn.className = 'primary-btn';
+    backBtn.style.width = '100%';
+    priceBox.appendChild(backBtn);
+
+    overlay.append(mainBox, priceBox);
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      mainBox.style.transform = 'translateY(0)';
+      priceBox.style.transform = 'translateY(0)';
+    });
+
+    const close = (result) => {
+      overlay.style.opacity = '0';
+      setTimeout(() => document.body.removeChild(overlay), 200);
+      resolve(result);
+    };
+
+    cancelBtn.onclick = () => close(null);
+
+    priceBtn.onclick = () => {
+      mainBox.style.display = 'none';
+      priceBox.style.display = 'block';
+    };
+
+    backBtn.onclick = async () => {
+      for (const item of items) {
+        const val = document.getElementById(`price-input-${item.id}`).value.trim();
+        if (val !== '' && !/^[0-9]+$/.test(val)) {
+          await window.showAlert('数字以外のものが入力されています。<br>半角数字のみで入力してください。');
+          return;
+        }
+      }
+      priceBox.style.display = 'none';
+      mainBox.style.display = 'block';
+    };
+
+    okBtn.onclick = () => {
+      const priceMap = {};
+      items.forEach(item => {
+        const val = document.getElementById(`price-input-${item.id}`).value.trim();
+        if (val !== '') priceMap[item.id] = parseInt(val, 10);
+      });
+      close(priceMap);
+    };
   });
 };
 
@@ -478,7 +647,6 @@ window.openMemoModal = (itemId, directEdit = false) => {
 
   const hasMemo = item.memo && item.memo.trim().length > 0;
 
-  // --- 1. 閲覧用ビューの構築 ---
   const viewContainer = document.createElement('div');
   viewContainer.style.cssText = `display: ${directEdit ? 'none' : 'flex'}; flex-direction: column; gap: 16px;`;
 
@@ -518,7 +686,6 @@ window.openMemoModal = (itemId, directEdit = false) => {
   viewContainer.appendChild(currentMemoBox);
   viewContainer.appendChild(viewBtnContainer);
 
-  // --- 2. 追記用ビューの構築 ---
   const editContainer = document.createElement('div');
   editContainer.style.cssText = `display: ${directEdit ? 'flex' : 'none'}; flex-direction: column; gap: 16px;`;
 
@@ -616,8 +783,9 @@ window.openMemoModal = (itemId, directEdit = false) => {
       await rpc('update_item_memo', { p_item_id: item.id, p_memo: combinedMemo });
       showToast('メモを追記しました！');
       closeModal();
-      fetchItems();
+      fetchItems(true); 
     } catch (e) {
+      console.error(e);
       saveBtn.disabled = false;
       saveBtn.textContent = '保存';
     }
@@ -634,10 +802,13 @@ const setupSwipe = (container, item) => {
   let startX = 0, currentX = 0, isSwiping = false;
 
   content.addEventListener('touchstart', e => {
-    startX = e.touches[0].clientX;
+    // 💡 修正：指の初期位置を確実に取得する
+    startX = e.touches[0].clientX; 
+    
     if (startX < 20 || startX > window.innerWidth - 20) return;
 
     isSwiping = true;
+    state.isSwiping = true;
     currentX = 0;
     content.style.transition = 'none';
     container.style.transition = 'none';
@@ -670,6 +841,7 @@ const setupSwipe = (container, item) => {
   const handleEnd = () => {
     if (!isSwiping) return;
     isSwiping = false;
+    state.isSwiping = false;
 
     if (currentX > 80) {
       content.style.transition = 'transform 0.2s ease';
@@ -680,10 +852,19 @@ const setupSwipe = (container, item) => {
         content.removeEventListener('transitionend', handler); 
         
         setTimeout(async () => {
-          if (await window.showConfirm('購入済みにしますか？')) {
+          const res = await window.showConfirm('購入済みにしますか？', { withPrice: true });
+          if (res && res.confirmed) {
             container.style.display = 'none';
-            await rpc('mark_as_purchased', { p_item_ids: [item.id] });
-            fetchItems();
+            try {
+              if (res.price !== null) {
+                await rpc('update_item_price', { p_item_id: item.id, p_price: res.price });
+              }
+              await rpc('mark_as_purchased', { p_item_ids: [item.id] });
+              fetchItems(true);
+            } catch (err) {
+              console.error(err);
+              await window.showAlert('処理中にエラーが発生しました。');
+            }
           } else {
             resetSwipe();
           }
@@ -699,10 +880,15 @@ const setupSwipe = (container, item) => {
         content.removeEventListener('transitionend', handler);
         
         setTimeout(async () => {
-          if (await window.showConfirm('完全に削除しますか？', true)) {
+          if (await window.showConfirm('完全に削除しますか？', { isDanger: true })) {
             container.style.display = 'none';
-            await rpc('delete_item_permanently', { p_item_ids: [item.id] });
-            fetchItems();
+            try {
+              await rpc('delete_item_permanently', { p_item_ids: [item.id] });
+              fetchItems(true);
+            } catch (err) {
+              console.error(err);
+              await window.showAlert('削除処理に失敗しました。');
+            }
           } else {
             resetSwipe();
           }
@@ -748,8 +934,11 @@ window.repeatItem = async (id, event) => {
     }).catch(e => console.error('LINE通知の呼び出しに失敗:', e));
 
     showToast('リストに追加しました🔄');
-    fetchItems();
-  } catch (e) {}
+    fetchItems(true);
+  } catch (e) {
+    console.error(e);
+    await window.showAlert('リストへの追加に失敗しました。');
+  }
 };
 
 document.getElementById('login-btn').onclick = async () => {
@@ -770,7 +959,8 @@ document.getElementById('login-btn').onclick = async () => {
     await fetchItems();
     startSync();
   } catch (e) {
-    alert('パスワードが違います。');
+    console.error(e);
+    await window.showAlert('パスワードが違います。');
   } finally {
     btn.disabled = false;
   }
@@ -796,7 +986,10 @@ document.getElementById('go-history-btn').onclick = () => {
   state.currentCategory = 'history';
   state.isEditMode = false;
   state.selectedIds.clear();
-  fetchItems();
+  
+  state.isTransitioning = true;
+  render();
+  fetchItems(true);
 };
 
 document.getElementById('qty-minus').onclick = () => {
@@ -819,7 +1012,10 @@ document.getElementById('add-btn').onclick = async () => {
   const name = nameInput.value.trim();
   const memo = memoInput.value.trim() || null;
   
-  if (!name) return;
+  if (!name) {
+    await window.showAlert('品名を入力してください。');
+    return;
+  }
 
   const btn = document.getElementById('add-btn');
   btn.disabled = true;
@@ -849,9 +1045,13 @@ document.getElementById('add-btn').onclick = async () => {
     state.newQuantity = 1;
     document.getElementById('qty-display').textContent = '1';
     showToast('追加しました');
-    await fetchItems();
+    
+    state.isTransitioning = true;
+    render();
+    await fetchItems(true);
   } catch(e) {
     console.error(e);
+    await window.showAlert('追加に失敗しました。');
   } finally {
     btn.disabled = false;
     btn.textContent = '追加';
@@ -888,17 +1088,36 @@ const updateSelectCount = () => {
 document.getElementById('purchase-selected-btn').onclick = async () => {
   if (state.selectedIds.size === 0) return;
   
-  if (!(await window.showConfirm('選択した品物を購入済みにしますか？'))) return;
+  const selectedItems = state.items.filter(i => state.selectedIds.has(i.id));
+
+  const priceMap = await window.showMultiPurchasePrompt(selectedItems);
+  if (priceMap === null) return; 
 
   const ids = Array.from(state.selectedIds);
 
   try {
+    const updatePromises = Object.entries(priceMap)
+      .filter(([id]) => state.selectedIds.has(id))
+      .map(([id, price]) => 
+        rpc('update_item_price', { p_item_id: id, p_price: price })
+      );
+
+    if (updatePromises.length > 0) {
+      await Promise.all(updatePromises);
+    }
+    
     await rpc('mark_as_purchased', { p_item_ids: ids });
+    
     state.isEditMode = false;
     state.selectedIds.clear();
     showToast('購入済みにしました✨');
-    await fetchItems();
+    
+    state.isTransitioning = true;
+    render();
+    fetchItems(true); 
   } catch (e) {
+    console.error('購入エラー:', e);
+    await window.showAlert('通信エラーが発生しました。');
   }
 };
 
@@ -906,15 +1125,17 @@ document.getElementById('delete-selected-btn').onclick = async () => {
   if (state.selectedIds.size === 0) return;
   const ids = Array.from(state.selectedIds);
   
-  if (!(await window.showConfirm('選択した品物を完全に削除します。よろしいですか？\n（履歴には残りません）', true))) return;
+  if (!(await window.showConfirm('選択した品物を完全に削除します。よろしいですか？\n（履歴には残りません）', { isDanger: true }))) return;
 
   try {
     await rpc('delete_item_permanently', { p_item_ids: ids });
     state.isEditMode = false;
     state.selectedIds.clear();
     showToast('完全に削除しました🗑️');
-    await fetchItems();
+    fetchItems(true); 
   } catch (e) {
+    console.error(e);
+    await window.showAlert('削除処理に失敗しました。');
   }
 };
 
@@ -929,7 +1150,11 @@ if (state.password) {
       fetchItems();
       startSync();
     })
-    .catch(() => {
+    .catch((e) => {
+      if (e.message !== 'Invalid') {
+        showToast('オフライン、または通信が不安定です', 'error');
+        return;
+      }
       logout();
     });
 } else {
