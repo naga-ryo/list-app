@@ -139,9 +139,7 @@ const renderCategoryList = () => {
 
   const allDiv = document.createElement('div');
   allDiv.className = 'list-item';
-  allDiv.style.border = 'none';
-  allDiv.style.borderLeft = '6px solid var(--accent)';
-  allDiv.style.background = 'linear-gradient(90deg, #eafaf1 0%, var(--surface) 25%)';
+  allDiv.style.border = '2px solid var(--text-main)';
   
   allDiv.onclick = () => {
     state.items.forEach(item => state.readItemIds.add(item.id));
@@ -360,7 +358,7 @@ const renderItemList = () => {
         <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 4px;">
           購入: ${buyer}${daysLaterStr}
         </div>
-        <button class="repeat-btn" onclick="repeatItem('${item.id}', event)">🔄 もう一度買う</button>
+        <button class="repeat-btn" onclick="repeatItem('${item.id}', event)">🔄 再追加</button>
       `;
     } else {
       const createdTimeStr = formatDate(item.created_at);
