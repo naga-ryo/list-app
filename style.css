@@ -50,7 +50,6 @@ html, body {
   overflow: hidden;
 }
 
-/* ヘッダーの背景色を動的変数に指定 */
 header {
   display: flex; justify-content: space-between; align-items: center;
   padding: 16px; 
@@ -148,14 +147,11 @@ button:active { opacity: 0.7; transform: scale(0.98); }
   touch-action: pan-y;
 }
 
-
-/* detail-rowの調整 */
 .detail-row { 
   display: flex; align-items: center; gap: 16px; 
   background: var(--surface); padding: 16px; margin-bottom: 10px; 
   border-radius: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.01);
 }
-/* スワイプコンテナの中の行はマージンなどを消す */
 .swipe-content.detail-row { margin-bottom: 0; box-shadow: none; border-radius: 16px; }
 
 .detail-row input[type="checkbox"] { transform: scale(1.4); margin-left: 4px; accent-color: var(--accent); }
@@ -164,7 +160,15 @@ button:active { opacity: 0.7; transform: scale(0.98); }
 .detail-info p { font-size: 0.8rem; color: var(--text-sub); margin-top: 4px; }
 .detail-qty { font-size: 1.1rem; font-weight: bold; background: #f1f5f9; padding: 4px 10px; border-radius: 8px; }
 
-/* 履歴の再度購入ボタン */
+.memo-badge {
+  font-size: 0.75rem; background: #eef2f7; color: #34495e;
+  padding: 4px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid #cbd5e1; display: inline-flex; align-items: center;
+  font-weight: bold; transition: all 0.2s ease;
+}
+.memo-badge:active { transform: scale(0.95); opacity: 0.8; }
+.memo-badge.empty { background: transparent; border: 1px dashed #cbd5e1; color: var(--text-sub); }
+
 .repeat-btn {
   font-size: 0.75rem; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--text-main);
   color: var(--text-main); background: transparent; margin-top: 6px; display: inline-block;
@@ -205,7 +209,6 @@ button:active { opacity: 0.7; transform: scale(0.98); }
 .input-group input[type="text"] { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border); background: #f8fafc; font-size: 1rem; outline: none; }
 .input-group input[type="text"]:focus { border-color: var(--accent); background: #fff; }
 #new-item-memo { font-size: 0.85rem; padding: 8px 10px; background: #ffffff; }
-.memo-text { font-size: 0.8rem; color: #34495e; background: #eef2f7; padding: 4px 8px; border-radius: 6px; margin-top: 6px; display: inline-block; word-break: break-all; border-left: 3px solid #cbd5e1; }
 
 #detail-view header { position: relative; display: flex; align-items: center; justify-content: center; height: 60px; padding: 0 16px; color: var(--dynamic-header-text); }
 #detail-view header h1 { color: inherit; font-size: 1.2rem; text-align: center; max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0 auto; }

@@ -68,14 +68,10 @@ const formatDate = (isoString) => {
   const todayZero = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const diffDays = Math.floor((todayZero - targetZero) / (1000 * 60 * 60 * 24));
   
-  const hours = targetDate.getHours().toString().padStart(2, '0');
-  const minutes = targetDate.getMinutes().toString().padStart(2, '0');
-  const timeStr = `${hours}:${minutes}`;
-
-  if (diffDays === 0) return timeStr;
-  else if (diffDays === 1) return `昨日 ${timeStr}`;
-  else if (diffDays > 1 && diffDays < 7) return `${diffDays}日前 ${timeStr}`;
-  else return `${targetDate.getMonth() + 1}/${targetDate.getDate()} ${timeStr}`;
+  if (diffDays === 0) return '今日';
+  else if (diffDays === 1) return '昨日';
+  else if (diffDays > 1 && diffDays < 7) return `${diffDays}日前`;
+  else return `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
 };
 
 const saveReadItems = () => {
@@ -143,7 +139,10 @@ const renderCategoryList = () => {
 
   const allDiv = document.createElement('div');
   allDiv.className = 'list-item';
-  allDiv.style.border = '2px solid var(--accent)';
+  allDiv.style.border = 'none';
+  allDiv.style.borderLeft = '6px solid var(--accent)';
+  allDiv.style.background = 'linear-gradient(90deg, #eafaf1 0%, var(--surface) 25%)';
+  
   allDiv.onclick = () => {
     state.items.forEach(item => state.readItemIds.add(item.id));
     saveReadItems();
@@ -268,7 +267,15 @@ const renderItemList = () => {
   
   let targetItems;
   if (isHistory) {
-    targetItems = state.historyItems;
+    targetItems = [...state.historyItems].sort((a, b) => {
+      const dateA = new Date(a.purchased_at || 0).setHours(0, 0, 0, 0);
+      const dateB = new Date(b.purchased_at || 0).setHours(0, 0, 0, 0);
+      if (dateB !== dateA) return dateB - dateA;
+      
+      const indexA = CATEGORIES.findIndex(c => c.name === a.category);
+      const indexB = CATEGORIES.findIndex(c => c.name === b.category);
+      return indexA - indexB;
+    });
   } else if (isAll) {
     targetItems = [...state.items].sort((a, b) => {
       const indexA = CATEGORIES.findIndex(c => c.name === a.category);
@@ -300,6 +307,7 @@ const renderItemList = () => {
         container.appendChild(divider);
       }
     }
+
     if (isAll && item.category !== lastCategory) {
       lastCategory = item.category;
       const cObj = CATEGORIES.find(c => c.name === item.category);
@@ -310,7 +318,6 @@ const renderItemList = () => {
     }
 
     const div = document.createElement('div');
-    // スワイプ可能にする条件：履歴画面ではなく、編集モードでもない時
     const isSwipeable = !isHistory && !state.isEditMode;
     div.className = isSwipeable ? 'swipe-container' : 'detail-row';
     
@@ -323,40 +330,56 @@ const renderItemList = () => {
     const catObj = CATEGORIES.find(c => c.name === item.category);
     const badgeColor = catObj ? catObj.hex : '#95a5a6';
     const categoryBadge = (isAll || isHistory) ? `<span style="font-size: 0.7rem; background: ${badgeColor}; color: white; padding: 2px 8px; border-radius: 20px; margin-left: 8px; font-weight: bold; vertical-align: middle;">${item.category}</span>` : '';
-    const memoHtml = item.memo ? `<div class="memo-text">📝 ${item.memo}</div>` : '';
+    
+    const hasMemo = item.memo && item.memo.trim().length > 0;
+    let memoBadge = '';
+    
+    if (isHistory) {
+      memoBadge = hasMemo
+        ? `<span class="memo-badge" onclick="event.stopPropagation(); window.openMemoModal('${item.id}')">💬 メモを確認</span>`
+        : `<span class="memo-badge" style="background: var(--border); color: var(--text-sub); border: none; cursor: default;" onclick="event.stopPropagation();">📝 メモなし</span>`;
+    } else {
+      memoBadge = hasMemo
+        ? `<span class="memo-badge" onclick="event.stopPropagation(); window.openMemoModal('${item.id}')">💬 メモを確認</span>`
+        : `<span class="memo-badge empty" onclick="event.stopPropagation(); window.openMemoModal('${item.id}', true)">➕ メモを追加</span>`;
+    }
 
-    const createdTimeStr = formatDate(item.created_at);
     let historyInfoHtml = '';
     
     if (isHistory) {
-      const purchasedTimeStr = formatDate(item.purchased_at);
       const buyer = item.purchased_by || '不明'; 
+      let daysLaterStr = '';
+      if (item.created_at && item.purchased_at) {
+        const cZero = new Date(new Date(item.created_at).setHours(0, 0, 0, 0)).getTime();
+        const pZero = new Date(new Date(item.purchased_at).setHours(0, 0, 0, 0)).getTime();
+        const diffDays = Math.floor((pZero - cZero) / (1000 * 60 * 60 * 24));
+        daysLaterStr = diffDays <= 0 ? ' (同日)' : ` (追加から${diffDays}日後)`;
+      }
+
       historyInfoHtml = `
-        <div style="font-size: 0.75rem; color: var(--text-sub); margin-top: 6px; line-height: 1.5;">
-          <div style="color: var(--accent); font-weight: bold;">購入: ${buyer} (${purchasedTimeStr})</div>
-          <div>追加: ${item.created_by} (${createdTimeStr})</div>
+        <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 4px;">
+          購入: ${buyer}${daysLaterStr}
         </div>
         <button class="repeat-btn" onclick="repeatItem('${item.id}', event)">🔄 もう一度買う</button>
       `;
     } else {
+      const createdTimeStr = formatDate(item.created_at);
       historyInfoHtml = `
         <p style="font-size: 0.8rem; color: var(--text-sub); margin-top: 4px;">追加: ${item.created_by} (${createdTimeStr})</p>
       `;
     }
 
-    // 中身のコンテンツを作成
     const innerContent = `
       ${checkboxHtml}
       <div class="detail-info" onclick="${state.isEditMode ? `document.querySelector('input[value=\"${item.id}\"]').click()` : ''}">
         <h4>${item.item_name} ${categoryBadge}</h4>
-        ${memoHtml}
+        <div style="margin-top: 6px;">${memoBadge}</div>
         ${historyInfoHtml}
       </div>
       <div class="detail-qty">×${item.quantity}</div>
     `;
 
     if (isSwipeable) {
-      // スワイプ構造の中に中身を流し込む
       div.innerHTML = `<div class="swipe-bg-label"></div><div class="swipe-content detail-row">${innerContent}</div>`;
       setupSwipe(div, item);
     } else {
@@ -372,7 +395,6 @@ const renderItemList = () => {
 
 window.showConfirm = (message, isDelete = false) => {
   return new Promise((resolve) => {
-
     const overlay = document.createElement('div');
     overlay.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -433,6 +455,175 @@ window.showConfirm = (message, isDelete = false) => {
     okBtn.onclick = () => closeAndResolve(true);
     cancelBtn.onclick = () => closeAndResolve(false);
   });
+};
+
+window.openMemoModal = (itemId, directEdit = false) => {
+  const isHistory = state.currentCategory === 'history';
+  const item = (isHistory ? state.historyItems : state.items).find(i => i.id === itemId);
+  if (!item) return;
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.5); z-index: 10000;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.2s ease; padding: 20px;
+  `;
+
+  const box = document.createElement('div');
+  box.style.cssText = `
+    background: var(--surface, #ffffff); padding: 20px; border-radius: 16px;
+    width: 100%; max-width: 360px; display: flex; flex-direction: column;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    transform: translateY(20px); transition: transform 0.2s ease;
+  `;
+
+  const hasMemo = item.memo && item.memo.trim().length > 0;
+
+  // --- 1. 閲覧用ビューの構築 ---
+  const viewContainer = document.createElement('div');
+  viewContainer.style.cssText = `display: ${directEdit ? 'none' : 'flex'}; flex-direction: column; gap: 16px;`;
+
+  const viewTitle = document.createElement('h3');
+  viewTitle.textContent = `📝 ${item.item_name} のメモ`;
+  viewTitle.style.margin = '0';
+  viewTitle.style.fontSize = '1.1rem';
+
+  const currentMemoBox = document.createElement('div');
+  currentMemoBox.style.cssText = `
+    background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid var(--border);
+    white-space: pre-wrap; font-size: 0.9rem; max-height: 250px; overflow-y: auto; color: var(--text-main); line-height: 1.5;
+  `;
+  currentMemoBox.textContent = hasMemo ? item.memo : 'メモはまだありません。';
+  if (!hasMemo) currentMemoBox.style.color = 'var(--text-sub)';
+
+  const viewBtnContainer = document.createElement('div');
+  viewBtnContainer.style.cssText = `display: flex; gap: 12px;`;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '閉じる';
+  closeBtn.className = 'secondary-btn';
+  closeBtn.style.flex = '1';
+
+  viewBtnContainer.appendChild(closeBtn);
+
+  let editBtn = null;
+  if (!isHistory) {
+    editBtn = document.createElement('button');
+    editBtn.textContent = '追記する';
+    editBtn.className = 'primary-btn';
+    editBtn.style.flex = '1';
+    viewBtnContainer.appendChild(editBtn);
+  }
+
+  viewContainer.appendChild(viewTitle);
+  viewContainer.appendChild(currentMemoBox);
+  viewContainer.appendChild(viewBtnContainer);
+
+  // --- 2. 追記用ビューの構築 ---
+  const editContainer = document.createElement('div');
+  editContainer.style.cssText = `display: ${directEdit ? 'flex' : 'none'}; flex-direction: column; gap: 16px;`;
+
+  const editTitle = document.createElement('h3');
+  editTitle.textContent = `📝 追記を入力`;
+  editTitle.style.margin = '0';
+  editTitle.style.fontSize = '1.1rem';
+
+  const inputArea = document.createElement('textarea');
+  inputArea.placeholder = '新しい追記を入力...';
+  inputArea.style.cssText = `
+    width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border);
+    font-size: 1rem; resize: none; height: 120px; outline: none;
+  `;
+  inputArea.onfocus = () => inputArea.style.borderColor = 'var(--accent)';
+  inputArea.onblur = () => inputArea.style.borderColor = 'var(--border)';
+
+  const editBtnContainer = document.createElement('div');
+  editBtnContainer.style.cssText = `display: flex; gap: 12px;`;
+
+  const backBtn = document.createElement('button');
+  backBtn.textContent = '戻る';
+  backBtn.className = 'secondary-btn';
+  backBtn.style.flex = '1';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = '保存';
+  saveBtn.className = 'primary-btn';
+  saveBtn.style.flex = '1';
+
+  editBtnContainer.appendChild(backBtn);
+  editBtnContainer.appendChild(saveBtn);
+
+  editContainer.appendChild(editTitle);
+  editContainer.appendChild(inputArea);
+  editContainer.appendChild(editBtnContainer);
+
+  box.appendChild(viewContainer);
+  box.appendChild(editContainer);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  requestAnimationFrame(() => {
+    overlay.style.opacity = '1';
+    box.style.transform = 'translateY(0)';
+    if (directEdit) inputArea.focus();
+  });
+
+  const closeModal = () => {
+    overlay.style.opacity = '0';
+    box.style.transform = 'translateY(20px)';
+    setTimeout(() => document.body.removeChild(overlay), 200);
+  };
+
+  closeBtn.onclick = closeModal;
+
+  if (editBtn) {
+    editBtn.onclick = () => {
+      viewContainer.style.display = 'none';
+      editContainer.style.display = 'flex';
+      inputArea.focus();
+    };
+  }
+
+  backBtn.onclick = () => {
+    if (directEdit && !hasMemo) {
+      closeModal();
+    } else {
+      editContainer.style.display = 'none';
+      viewContainer.style.display = 'flex';
+    }
+  };
+
+  saveBtn.onclick = async () => {
+    const newText = inputArea.value.trim();
+    if (!newText) {
+      if (directEdit && !hasMemo) closeModal();
+      else {
+        editContainer.style.display = 'none';
+        viewContainer.style.display = 'flex';
+      }
+      return;
+    }
+
+    if (!(await window.showConfirm('メモを追記して保存しますか？'))) return;
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+
+    const combinedMemo = hasMemo
+      ? `${item.memo}\n\n[📝追記: ${state.userName}]\n${newText}`
+      : `[📝追記: ${state.userName}]\n${newText}`;
+
+    try {
+      await rpc('update_item_memo', { p_item_id: item.id, p_memo: combinedMemo });
+      showToast('メモを追記しました！');
+      closeModal();
+      fetchItems();
+    } catch (e) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存';
+    }
+  };
 };
 
 // ==========================================
@@ -540,7 +731,6 @@ const setupSwipe = (container, item) => {
 // 4. イベントハンドラ・各種アクション
 // ==========================================
 
-// 履歴からの再追加
 window.repeatItem = async (id, event) => {
   if (event) event.stopPropagation();
   const item = state.historyItems.find(i => i.id === id);
@@ -563,7 +753,6 @@ window.repeatItem = async (id, event) => {
     fetchItems();
   } catch (e) {}
 };
-
 
 document.getElementById('login-btn').onclick = async () => {
   const pass = document.getElementById('password-input').value.trim();
