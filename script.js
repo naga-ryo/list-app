@@ -18,7 +18,7 @@ const CATEGORIES = [
   { id: 'grains', name: '穀類', icon: '🌾', colorClass: 'c-staple', hex: '#f39c12', textColor: '#ffffff' },
   { id: 'seasoning', name: '調味料', icon: '🧂', colorClass: 'c-seasoning', hex: '#9b59b6', textColor: '#ffffff' },
   { id: 'frozen', name: '冷凍食品', icon: '🧊', colorClass: 'c-frozen', hex: '#34495e', textColor: '#ffffff' },
-  { id: 'daily', name: '日用品', icon: '🧼', colorClass: 'c-daily', hex: '#1abc9c', textColor: '#ffffff' },
+  { id: 'processed', name: '加工食品', icon: '🥫', colorClass: 'c-processed', hex: '#1abc9c', textColor: '#ffffff' },
   { id: 'other', name: 'その他', icon: '🏷️', colorClass: 'c-other', hex: '#95a5a6', textColor: '#ffffff' }
 ];
 
