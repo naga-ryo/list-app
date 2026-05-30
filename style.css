@@ -605,3 +605,32 @@ button:active {
   50% { opacity: 0.5; }
   100% { opacity: 1; }
 }
+
+/* ==========================================
+   History Direct Add & Price Link
+   ========================================== */
+.add-price-link {
+  color: var(--text-sub);
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.history-add-btn {
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 2px dashed #cbd5e1;
+  color: var(--text-main);
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-add-btn:active {
+  background: #f1f5f9;
+  transform: scale(0.98);
+}

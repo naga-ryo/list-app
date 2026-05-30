@@ -150,9 +150,7 @@ const formatDate = (isoString) => {
   return `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
 };
 
-/**
- * 既読状態のアイテムIDリストをローカルストレージに永続化
- */
+/** 既読状態のローカル保存 */
 const saveReadItems = () => {
   localStorage.setItem('app_read_items', JSON.stringify(Array.from(state.readItemIds)));
 };
@@ -409,6 +407,14 @@ const renderItemList = () => {
 
   container.innerHTML = '';
   
+  // 履歴画面用の「予定なく追加」ボタン
+  if (isHistory) {
+    const historyAddBtn = document.createElement('button');
+    historyAddBtn.className = 'history-add-btn';
+    historyAddBtn.innerHTML = '➕ 予定なく買ったものを追加';
+    historyAddBtn.onclick = () => window.showDirectAddPrompt();
+    container.appendChild(historyAddBtn);
+  }
   // --------------------------------------------------
   // 表示対象データの抽出とソート処理
   // --------------------------------------------------
@@ -435,7 +441,7 @@ const renderItemList = () => {
 
   if (targetItems.length === 0) {
     const msg = isHistory ? '購入済みの品物はありません' : '品物はありません';
-    container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-sub); font-size:0.95rem;">${msg}</div>`;
+    container.innerHTML += `<div style="text-align:center; padding:40px; color:var(--text-sub); font-size:0.95rem;">${msg}</div>`;
     return;
   }
 
@@ -502,11 +508,18 @@ const renderItemList = () => {
     let historyInfoHtml = '';
     if (isHistory) {
       const buyer = escapeHTML(item.purchased_by) || '不明'; 
-      const priceText = (item.price != null && item.price !== '') ? `${item.price}円` : '---円';
+      let priceHtml = '';
+      
+      // 金額未入力時のアクションリンク生成
+      if (item.price != null && item.price !== '') {
+        priceHtml = `${item.price}円`;
+      } else {
+        priceHtml = `<span class="add-price-link" onclick="window.addPriceToHistory('${item.id}', event)">クリックして記入</span>`;
+      }
 
       historyInfoHtml = `
         <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 4px; display: flex; align-items: center; gap: 8px;">
-          <span>購入: ${buyer} / 金額: ${priceText}</span>
+          <span>購入: ${buyer} / 金額: ${priceHtml}</span>
           <button class="repeat-btn" onclick="repeatItem('${item.id}', event)" title="もう一度買う">🔄</button>
         </div>
       `;
@@ -586,10 +599,15 @@ window.showConfirm = (message, options = {}) => {
       inputField = document.createElement('input');
       inputField.type = 'tel';
       inputField.placeholder = '金額を入力...（任意）';
-      inputField.style.cssText = `width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; font-size: 1.1rem; text-align: center; outline: none; background: #f8fafc;`;
+      inputField.style.cssText = `width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 1.1rem; text-align: center; outline: none; background: #f8fafc;`;
       box.appendChild(inputField);
-    }
 
+      // 税抜計算用チェックボックス
+      const taxLabel = document.createElement('label');
+      taxLabel.style.cssText = `display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.9rem; color: var(--text-main); margin-bottom: 20px; cursor: pointer;`;
+      taxLabel.innerHTML = `<input type="checkbox" id="confirm-tax-chk" style="transform: scale(1.2); accent-color: var(--accent);"> 税抜 (8%加算)`;
+      box.appendChild(taxLabel);
+    }
     // アクションボタン生成
     const btnContainer = document.createElement('div');
     btnContainer.style.cssText = `display: flex; gap: 12px; justify-content: center;`;
@@ -636,7 +654,12 @@ window.showConfirm = (message, options = {}) => {
           await window.showAlert('数字以外のものが入力されています。<br>半角数字のみで入力してください。');
           return; 
         }
-        closeAndResolve({ confirmed: true, price: val !== '' ? parseInt(val, 10) : null });
+        
+        let priceVal = val !== '' ? parseInt(val, 10) : null;
+        if (priceVal !== null && document.getElementById('confirm-tax-chk')?.checked) {
+          priceVal = Math.floor(priceVal * 1.08);
+        }
+        closeAndResolve({ confirmed: true, price: priceVal });
       } else {
         closeAndResolve(true);
       }
@@ -688,6 +711,10 @@ window.showMultiPurchasePrompt = (items) => {
     const priceBox = document.createElement('div');
     priceBox.style.cssText = `display: none; background: var(--surface); padding: 24px; border-radius: 16px; width: 100%; max-width: 320px; text-align: center; transform: translateY(20px); transition: transform 0.2s; box-shadow: 0 10px 25px rgba(0,0,0,0.2);`;
     
+    const taxLabelHtml = `<label style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 0.9rem; color: var(--text-main); margin-bottom: 16px; cursor: pointer;">
+      <input type="checkbox" id="multi-tax-chk" style="transform: scale(1.2); accent-color: var(--accent);"> すべて税抜 (8%加算)
+    </label>`;
+
     const listHtml = items.map(item => `
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; text-align: left;">
         <span style="font-size: 0.9rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px; font-weight:bold;">${escapeHTML(item.item_name)}</span>
@@ -696,7 +723,7 @@ window.showMultiPurchasePrompt = (items) => {
       </div>
     `).join('');
 
-    priceBox.innerHTML = `<h3 style="margin-bottom: 16px;">💰 各金額を入力</h3><div style="max-height: 40vh; overflow-y: auto; margin-bottom: 16px; padding-right: 4px;">${listHtml}</div>`;
+    priceBox.innerHTML = `<h3 style="margin-bottom: 16px;">💰 各金額を入力</h3>${taxLabelHtml}<div style="max-height: 40vh; overflow-y: auto; margin-bottom: 16px; padding-right: 4px;">${listHtml}</div>`;
 
     const backBtn = document.createElement('button');
     backBtn.textContent = '確認画面に戻る';
@@ -741,11 +768,122 @@ window.showMultiPurchasePrompt = (items) => {
 
     okBtn.onclick = () => {
       const priceMap = {};
+      const isTaxExclude = document.getElementById('multi-tax-chk')?.checked;
+
       items.forEach(item => {
         const val = document.getElementById(`price-input-${item.id}`).value.trim();
-        if (val !== '') priceMap[item.id] = parseInt(val, 10);
+        if (val !== '') {
+          let pVal = parseInt(val, 10);
+          if (isTaxExclude) pVal = Math.floor(pVal * 1.08);
+          priceMap[item.id] = pVal;
+        }
       });
       close(priceMap);
+    };
+  });
+};
+
+/**
+ * 思いつきで購入したものを履歴に直接追加する専用モーダル
+ * @returns {Promise<boolean|null>} 
+ */
+window.showDirectAddPrompt = () => {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease; padding: 20px;`;
+    
+    const box = document.createElement('div');
+    box.style.cssText = `background: var(--surface); padding: 24px; border-radius: 16px; width: 100%; max-width: 320px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.2s ease;`;
+
+    const catOptions = CATEGORIES.map(c => `<option value="${c.name}">${c.icon} ${c.name}</option>`).join('');
+
+    box.innerHTML = `
+      <h3 style="margin-bottom: 16px; text-align: center;">🛒 買ったものを直接追加</h3>
+      <input type="text" id="direct-name" placeholder="品名 (必須)" style="width:100%; padding:12px; margin-bottom:12px; border-radius:8px; border:1px solid var(--border); outline:none; font-size: 1rem;">
+      <select id="direct-category" style="width:100%; padding:12px; margin-bottom:12px; border-radius:8px; border:1px solid var(--border); outline:none; background:#f8fafc; font-size: 1rem; color: var(--text-main);">
+        ${catOptions}
+      </select>
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <input type="tel" id="direct-price" placeholder="金額 (任意)" style="flex:1; padding:12px; border-radius:8px; border:1px solid var(--border); outline:none; text-align:right; font-size: 1rem;">
+        <span style="display:flex; align-items:center; font-weight:bold;">円</span>
+      </div>
+      <label style="display:flex; justify-content:flex-end; align-items:center; gap:8px; font-size:0.9rem; margin-bottom:16px; cursor:pointer;">
+        <input type="checkbox" id="direct-tax-chk" style="transform: scale(1.2); accent-color: var(--accent);"> 税抜 (8%加算)
+      </label>
+      <input type="text" id="direct-memo" placeholder="メモ (任意)" style="width:100%; padding:12px; margin-bottom:24px; border-radius:8px; border:1px solid var(--border); outline:none; font-size: 1rem;">
+      <div style="display:flex; gap:12px;">
+        <button id="direct-cancel" class="secondary-btn" style="flex:1; padding:12px 0;">キャンセル</button>
+        <button id="direct-ok" class="primary-btn" style="flex:1; padding:12px 0;">追加</button>
+      </div>
+    `;
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      box.style.transform = 'translateY(0)';
+      document.getElementById('direct-name').focus();
+    });
+
+    const closeAndResolve = (res) => {
+      overlay.style.opacity = '0';
+      box.style.transform = 'translateY(20px)';
+      setTimeout(() => {
+        document.body.removeChild(overlay);
+        resolve(res);
+      }, 200);
+    };
+
+    document.getElementById('direct-cancel').onclick = () => closeAndResolve(null);
+
+    document.getElementById('direct-ok').onclick = async () => {
+      const name = document.getElementById('direct-name').value.trim();
+      if (!name) {
+        await window.showAlert('品名を入力してください。');
+        return;
+      }
+      const cat = document.getElementById('direct-category').value;
+      const memo = document.getElementById('direct-memo').value.trim() || null;
+      const priceStr = document.getElementById('direct-price').value.trim();
+      let price = null;
+      
+      if (priceStr) {
+        if (!/^[0-9]+$/.test(priceStr)) {
+          await window.showAlert('金額は半角数字のみで入力してください。');
+          return;
+        }
+        price = parseInt(priceStr, 10);
+        if (document.getElementById('direct-tax-chk').checked) {
+          price = Math.floor(price * 1.08);
+        }
+      }
+
+      const okBtn = document.getElementById('direct-ok');
+      okBtn.disabled = true;
+      okBtn.textContent = '追加中...';
+
+      try {
+        // 未購入アイテムとして一度追加
+        await rpc('add_item', { p_item_name: name, p_category: cat, p_quantity: 1, p_memo: memo, p_price: price });
+        
+        // 最新のアイテムを取得してIDを特定し、購入済みステータスに変更
+        const unpurchased = await rpc('get_items');
+        const addedItem = unpurchased.reverse().find(i => i.item_name === name && i.category === cat);
+
+        if (addedItem) {
+          await rpc('mark_as_purchased', { p_item_ids: [addedItem.id] });
+        }
+
+        showToast('履歴に追加しました！');
+        fetchItems(true);
+        closeAndResolve(true);
+      } catch (e) {
+        console.error('Direct add failed:', e);
+        await window.showAlert('追加に失敗しました。');
+        okBtn.disabled = false;
+        okBtn.textContent = '追加';
+      }
     };
   });
 };
@@ -1007,6 +1145,7 @@ const setupSwipe = (container, item) => {
               }
               await rpc('mark_as_purchased', { p_item_ids: [item.id] });
               fetchItems(true);
+              showToast('購入済みにしました✨');
             } catch (err) {
               console.error('Purchase failed via swipe:', err);
               await window.showAlert('処理中にエラーが発生しました。');
@@ -1032,6 +1171,7 @@ const setupSwipe = (container, item) => {
             try {
               await rpc('delete_item_permanently', { p_item_ids: [item.id] });
               fetchItems(true);
+              showToast('完全に削除しました🗑️');
             } catch (err) {
               console.error('Delete failed via swipe:', err);
               await window.showAlert('削除処理に失敗しました。');
@@ -1063,6 +1203,22 @@ const setupSwipe = (container, item) => {
 // 6. Event Handlers
 // ==========================================
 
+// 履歴アイテムの金額未入力時、後から金額を追加するイベント
+window.addPriceToHistory = async (id, event) => {
+  if (event) event.stopPropagation();
+  const res = await window.showConfirm('購入金額を入力してください', { withPrice: true });
+  if (res && res.confirmed && res.price !== null) {
+    try {
+      await rpc('update_item_price', { p_item_id: id, p_price: res.price });
+      showToast('金額を追加しました✨');
+      fetchItems(true);
+    } catch (e) {
+      console.error('Add price failed:', e);
+      await window.showAlert('金額の追加に失敗しました。');
+    }
+  }
+};
+
 // 履歴画面からの「もう一度買う」イベント
 window.repeatItem = async (id, event) => {
   if (event) event.stopPropagation();
@@ -1080,6 +1236,7 @@ window.repeatItem = async (id, event) => {
     });
     
     // LINE通知トリガー
+    /*
     dbClient.functions.invoke('line-notify', {
       body: { 
         user: state.userName, 
@@ -1088,6 +1245,7 @@ window.repeatItem = async (id, event) => {
         quantity: 1 
       }
     }).catch(e => console.error('LINE notification failed:', e));
+    */
 
     showToast('リストに追加しました🔄');
     fetchItems(true);
@@ -1193,6 +1351,7 @@ document.getElementById('add-btn').onclick = async () => {
       p_quantity: state.newQuantity
     });
     
+    /*
     dbClient.functions.invoke('line-notify', {
       body: { 
         user: state.userName, 
@@ -1201,6 +1360,7 @@ document.getElementById('add-btn').onclick = async () => {
         quantity: state.newQuantity 
       }
     }).catch(e => console.error('LINE notification failed:', e));
+    */
 
     nameInput.blur();
     memoInput.blur();
