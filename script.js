@@ -1550,7 +1550,38 @@ document.getElementById('delete-selected-btn').onclick = async () => {
 // 7. Initialization & Auto Recovery
 // ==========================================
 
-// ログイン処理と定期同期の開始を関数化
+let reconnectInterval = null; // 再接続タイマー
+
+// オフラインモードへの移行と、10秒ごとの再接続処理
+const handleOfflineMode = () => {
+  if (state.userName !== 'オフライン(閲覧のみ)') {
+    showToast('通信エラー: 保存されたリストを表示します', 'error');
+  }
+  state.userName = 'オフライン(閲覧のみ)';
+  
+  try {
+    const cachedItems = localStorage.getItem('app_cached_items');
+    if (cachedItems) state.items = JSON.parse(cachedItems);
+    
+    const cachedHistory = localStorage.getItem('app_cached_history');
+    if (cachedHistory) state.historyItems = JSON.parse(cachedHistory);
+  } catch (parseError) {
+    console.error('Cache parse error:', parseError);
+  }
+  
+  render();
+
+  // オフライン中は10秒ごとに再接続を試みる
+  if (!reconnectInterval) {
+    reconnectInterval = setInterval(() => {
+      if (state.userName === 'オフライン(閲覧のみ)') {
+        attemptLoginAndSync();
+      }
+    }, 10000);
+  }
+};
+
+// ログイン処理と定期同期の開始
 const attemptLoginAndSync = () => {
   if (!state.supabaseKey || !state.password) {
     render();
@@ -1558,22 +1589,7 @@ const attemptLoginAndSync = () => {
   }
   
   if (!window.supabase) {
-    if (state.userName !== 'オフライン(閲覧のみ)') {
-      showToast('オフラインのため、保存されたリストを表示します', 'error');
-    }
-    state.userName = 'オフライン(閲覧のみ)';
-    
-    try {
-      const cachedItems = localStorage.getItem('app_cached_items');
-      if (cachedItems) state.items = JSON.parse(cachedItems);
-      
-      const cachedHistory = localStorage.getItem('app_cached_history');
-      if (cachedHistory) state.historyItems = JSON.parse(cachedHistory);
-    } catch (parseError) {
-      console.error('Cache parse error:', parseError);
-    }
-    
-    render();
+    handleOfflineMode();
     return;
   }
 
@@ -1586,38 +1602,35 @@ const attemptLoginAndSync = () => {
       if (!data) throw new Error('Invalid');
       
       state.userName = data;
+      
+      // 再接続タイマーが動いていれば停止してオンライン復帰
+      if (reconnectInterval) {
+        clearInterval(reconnectInterval);
+        reconnectInterval = null;
+        showToast('オンラインに復帰しました✨', 'success');
+      }
+
       fetchItems();
       startSync();
     })
-
     .catch((e) => {
       if (e.message !== 'Invalid') {
-        if (state.userName !== 'オフライン(閲覧のみ)') {
-          showToast('オフラインのため、保存されたリストを表示します', 'error');
+        handleOfflineMode(); // 通信エラーやタイムアウトはオフラインモードへ
+      } else {
+        // 本当にパスワードが間違っている・変更された場合のみログアウト
+        if (reconnectInterval) {
+          clearInterval(reconnectInterval);
+          reconnectInterval = null;
         }
-        state.userName = 'オフライン(閲覧のみ)';
-        
-        try {
-          const cachedItems = localStorage.getItem('app_cached_items');
-          if (cachedItems) state.items = JSON.parse(cachedItems);
-          
-          const cachedHistory = localStorage.getItem('app_cached_history');
-          if (cachedHistory) state.historyItems = JSON.parse(cachedHistory);
-        } catch (parseError) {
-          console.error('Cache parse error:', parseError);
-        }
-        
-        render();
-        return;
+        logout();
       }
-      logout();
     });
 };
 
 // 初回起動時の実行
 attemptLoginAndSync();
 
-// 電波が戻った瞬間に自動でオンラインに復帰する
+// スマホの電波が戻った瞬間に自動でオンラインに復帰する
 window.addEventListener('online', () => {
   if (state.userName === 'オフライン(閲覧のみ)') {
     showToast('通信が回復しました。自動で再接続します...', 'success');
@@ -1625,14 +1638,14 @@ window.addEventListener('online', () => {
   }
 });
 
-// アプリ起動中に電波を失った場合、自動で閲覧モードに切り替える
+// スマホが電波を失った場合、即座に閲覧モードに切り替える
 window.addEventListener('offline', () => {
   if (state.userName && state.userName !== 'オフライン(閲覧のみ)') {
     showToast('通信が切断されました。閲覧モードに移行します', 'error');
-    state.userName = 'オフライン(閲覧のみ)';
-    render();
+    handleOfflineMode();
   }
 });
+
 
 // スマホ本体の戻るボタンに対応する処理
 window.addEventListener('popstate', (event) => {
