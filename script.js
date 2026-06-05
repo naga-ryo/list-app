@@ -1322,14 +1322,16 @@ document.getElementById('login-btn').onclick = async () => {
 
   const btn = document.getElementById('login-btn');
   btn.disabled = true;
-  
+ 
   try {
     dbClient = window.supabase.createClient(SUPABASE_URL, key);
     const { data, error } = await dbClient.rpc('authenticate_user', { p_pass: pass });
     
-    if (error || !data) throw new Error('Invalid');
+    if (error) throw new Error('NetworkError'); 
+    if (!data) throw new Error('Invalid');
     
     state.supabaseKey = key;
+
     state.password = pass;
     state.userName = data;
     
@@ -1579,11 +1581,15 @@ const attemptLoginAndSync = () => {
   
   dbClient.rpc('authenticate_user', { p_pass: state.password })
     .then(({ data, error }) => {
-      if (error || !data) throw new Error('Invalid');
+      
+      if (error) throw new Error('NetworkError');
+      if (!data) throw new Error('Invalid');
+      
       state.userName = data;
       fetchItems();
       startSync();
     })
+
     .catch((e) => {
       if (e.message !== 'Invalid') {
         if (state.userName !== 'オフライン(閲覧のみ)') {
