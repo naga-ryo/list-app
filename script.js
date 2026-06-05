@@ -2,10 +2,7 @@
 // 1. Config & State Initialization
 // ==========================================
 const SUPABASE_URL = 'https://yjtpmjhrjqbimcjztait.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_mclvJ1Tcf_e7lS3ufORyug_j7JZWn0G';
-
-const { createClient } = window.supabase;
-const dbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let dbClient = null;
 
 // アプリケーション全体で利用するカテゴリの定義
 const CATEGORIES = [
@@ -24,7 +21,8 @@ const CATEGORIES = [
 
 // アプリケーションのグローバルな状態管理
 let state = {
-  password: localStorage.getItem('app_password') || '', // セッション維持用パスワード
+  supabaseKey: localStorage.getItem('app_supabase_key') || '', // セッション維持用Supabaseキー
+  password: localStorage.getItem('app_password') || '',        // セッション維持用パスワード
   userName: '',                                         // 認証されたユーザー名
   items: [],                                            // 未購入のアイテム一覧
   historyItems: [],                                     // 購入済みのアイテム一覧
@@ -34,7 +32,7 @@ let state = {
   newQuantity: 1,                                       // 新規追加時の数量
   readItemIds: new Set(JSON.parse(localStorage.getItem('app_read_items')) || []), // 既読アイテムIDのキャッシュ
   isTransitioning: false,                               // データ取得・画面遷移中の状態フラグ
-  isSwiping: false                                      // スワイプジェスチャー中の状態フラグ
+  isSwiping: false                                      // スワイプジェスチャー中の状態フラグ                                      
 };
 
 let syncInterval = null;
@@ -61,11 +59,13 @@ const escapeHTML = (str) => {
  * @param {string} msg - 表示するメッセージ
  * @param {string} [type='success'] - 'success' または 'error'
  */
+let toastTimeout = null;
 const showToast = (msg, type = 'success') => {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
   toast.className = `toast ${type}`;
-  setTimeout(() => toast.classList.add('hidden'), 2500);
+  if (toastTimeout) clearTimeout(toastTimeout); // 前のタイマーをキャンセル
+  toastTimeout = setTimeout(() => toast.classList.add('hidden'), 2500);
 };
 
 /**
@@ -84,7 +84,7 @@ window.showAlert = (message) => {
     box.style.cssText = `background: var(--surface); padding: 24px; border-radius: 16px; width: 100%; max-width: 320px; text-align: center; transform: translateY(20px); transition: transform 0.2s; box-shadow: 0 10px 25px rgba(0,0,0,0.2);`;
     
     box.innerHTML = `
-      <h3 style="color: var(--danger); font-size: 1.1rem; margin-bottom: 16px;">⚠️ エラー</h3>
+      <h3 style="color: var(--danger); font-size: 1.1rem; margin-bottom: 16px;">⚠️ 警告</h3>
       <p style="margin-bottom: 24px; font-size: 0.95rem; color: var(--text-main); line-height: 1.5;">${message}</p>
     `;
 
@@ -114,7 +114,19 @@ window.showAlert = (message) => {
  * @param {string} fnName - SupabaseのRPC関数名
  * @param {Object} [params={}] - 渡すパラメータ
  */
+
+// オフライン閲覧モードかどうかを判定・警告する安全装置 
+const checkOffline = async () => {
+  if (state.userName === 'オフライン(閲覧のみ)') {
+    await window.showAlert('現在オフラインのため、この操作はできません。<br>電波の良い場所でアプリを再起動してください。');
+    return true;
+  }
+  return false;
+};
+
 const rpc = async (fnName, params = {}) => {
+  if (!dbClient) throw new Error('Database client is not initialized.');
+  
   params.p_pass = state.password;
   const { data, error } = await dbClient.rpc(fnName, params);
   
@@ -164,16 +176,25 @@ const saveReadItems = () => {
  * @param {boolean} [isSilent=false] - 背景での定期更新かどうかのフラグ
  */
 const fetchItems = async (isSilent = false) => {
-  if (!state.userName) return;
+  if (state.userName === 'オフライン(閲覧のみ)' || !state.userName || !dbClient) {
+    // オフライン時に画面遷移した際、スケルトン表示を解除してキャッシュを描画
+    if (state.isTransitioning) {
+      state.isTransitioning = false;
+      render();
+    }
+    return;
+  }
   
   try {
     const itemsData = await rpc('get_items');
     state.items = itemsData || [];
+    localStorage.setItem('app_cached_items', JSON.stringify(state.items)); // 取得成功時にバックアップを保存
     
     // 履歴画面を開いている場合は履歴データも取得
     if (state.currentCategory === 'history') {
       const historyData = await rpc('get_purchased_items');
       state.historyItems = historyData || [];
+      localStorage.setItem('app_cached_history', JSON.stringify(state.historyItems.slice(0, 100)));  // 履歴もバックアップ
     }
 
     // 現在表示中のカテゴリ内のアイテムを既読状態に更新
@@ -192,10 +213,22 @@ const fetchItems = async (isSilent = false) => {
     }
   } catch (e) {
     console.error('Fetch error:', e);
+    
+    try {
+      const cachedItems = localStorage.getItem('app_cached_items');
+      if (cachedItems) state.items = JSON.parse(cachedItems);
+      
+      const cachedHistory = localStorage.getItem('app_cached_history');
+      if (cachedHistory) state.historyItems = JSON.parse(cachedHistory);
+    } catch (parseError) {
+      console.error('Cache parse error:', parseError);
+      state.items = [];
+      state.historyItems = [];
+    }
+
     const hasOpenDialog = document.querySelector('div[style*="z-index: 10000"]') !== null;
     state.isTransitioning = false;
     
-    // エラー発生時もスケルトン状態を解除するために再描画を試みる
     if (!state.isEditMode && !state.isSwiping && !hasOpenDialog) {
       render();
     }
@@ -260,6 +293,8 @@ const renderCategoryList = () => {
     state.currentCategory = 'all'; 
     state.isEditMode = false;
     state.selectedIds.clear();
+
+    history.pushState({ page: 'detail' }, '', '');
     
     state.isTransitioning = true;
     render(); 
@@ -306,6 +341,8 @@ const renderCategoryList = () => {
       state.currentCategory = cat.name;
       state.isEditMode = false;
       state.selectedIds.clear();
+
+      history.pushState({ page: 'detail' }, '', '');
 
       state.isTransitioning = true;
       render(); 
@@ -441,7 +478,10 @@ const renderItemList = () => {
 
   if (targetItems.length === 0) {
     const msg = isHistory ? '購入済みの品物はありません' : '品物はありません';
-    container.innerHTML += `<div style="text-align:center; padding:40px; color:var(--text-sub); font-size:0.95rem;">${msg}</div>`;
+    const emptyMsg = document.createElement('div');
+    emptyMsg.style.cssText = 'text-align:center; padding:40px; color:var(--text-sub); font-size:0.95rem;';
+    emptyMsg.textContent = msg;
+    container.appendChild(emptyMsg);
     return;
   }
 
@@ -718,7 +758,7 @@ window.showMultiPurchasePrompt = (items) => {
     const listHtml = items.map(item => `
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; text-align: left;">
         <span style="font-size: 0.9rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px; font-weight:bold;">${escapeHTML(item.item_name)}</span>
-        <input type="tel" id="price-input-${item.id}" placeholder="---" style="width: 80px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; text-align: right; outline: none;">
+        <input type="tel" id="price-input-${item.id}" placeholder="---" style="width: 80px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; text-align: right; outline: none; font-size: 16px;">
         <span style="font-size:0.9rem; margin-left:4px; font-weight:bold;">円</span>
       </div>
     `).join('');
@@ -787,7 +827,9 @@ window.showMultiPurchasePrompt = (items) => {
  * 思いつきで購入したものを履歴に直接追加する専用モーダル
  * @returns {Promise<boolean|null>} 
  */
-window.showDirectAddPrompt = () => {
+window.showDirectAddPrompt = async () => {
+  if (await checkOffline()) return null; // ガード
+
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease; padding: 20px;`;
@@ -1031,6 +1073,8 @@ window.openMemoModal = (itemId, directEdit = false) => {
   };
 
   saveBtn.onclick = async () => {
+    if (await checkOffline()) return; // ガード
+
     const newText = inputArea.value.trim();
     if (!newText) {
       if (directEdit && !hasMemo) closeModal();
@@ -1077,11 +1121,12 @@ const setupSwipe = (container, item) => {
   const content = container.querySelector('.swipe-content');
   const label = container.querySelector('.swipe-bg-label');
   
-  let startX = 0, currentX = 0, isSwiping = false;
+  let startX = 0, startY = 0, currentX = 0, isSwiping = false;
 
   // スワイプ開始位置の記録
   content.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX; 
+    startY = e.touches[0].clientY;
     
     // エッジスワイプ（iOSの戻る動作など）との競合を防止
     if (startX < 20 || startX > window.innerWidth - 20) return;
@@ -1098,6 +1143,15 @@ const setupSwipe = (container, item) => {
     if (!isSwiping) return;
 
     const deltaX = e.touches[0].clientX - startX;
+    const deltaY = e.touches[0].clientY - startY;
+
+    // 縦スクロールの意図が強い場合はスワイプ判定を即座にキャンセル
+    if (currentX === 0 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      isSwiping = false;
+      state.isSwiping = false;
+      return;
+    }
+
     currentX = deltaX;
 
     if (Math.abs(deltaX) > 10 && e.cancelable) {
@@ -1136,6 +1190,8 @@ const setupSwipe = (container, item) => {
         content.removeEventListener('transitionend', handler); 
         
         setTimeout(async () => {
+          if (await checkOffline()) { resetSwipe(); return; } // ガード
+
           const res = await window.showConfirm('購入済みにしますか？', { withPrice: true });
           if (res && res.confirmed) {
             container.style.display = 'none';
@@ -1166,6 +1222,8 @@ const setupSwipe = (container, item) => {
         content.removeEventListener('transitionend', handler);
         
         setTimeout(async () => {
+          if (await checkOffline()) { resetSwipe(); return; } // ガード
+
           if (await window.showConfirm('完全に削除しますか？', { isDanger: true })) {
             container.style.display = 'none';
             try {
@@ -1206,6 +1264,8 @@ const setupSwipe = (container, item) => {
 // 履歴アイテムの金額未入力時、後から金額を追加するイベント
 window.addPriceToHistory = async (id, event) => {
   if (event) event.stopPropagation();
+  if (await checkOffline()) return; // ガード
+
   const res = await window.showConfirm('購入金額を入力してください', { withPrice: true });
   if (res && res.confirmed && res.price !== null) {
     try {
@@ -1222,6 +1282,8 @@ window.addPriceToHistory = async (id, event) => {
 // 履歴画面からの「もう一度買う」イベント
 window.repeatItem = async (id, event) => {
   if (event) event.stopPropagation();
+  if (await checkOffline()) return; // ガード
+
   const item = state.historyItems.find(i => i.id === id);
   if (!item) return;
   
@@ -1235,18 +1297,6 @@ window.repeatItem = async (id, event) => {
       p_quantity: 1 
     });
     
-    // LINE通知トリガー
-    /*
-    dbClient.functions.invoke('line-notify', {
-      body: { 
-        user: state.userName, 
-        category: item.category, 
-        itemName: item.item_name, 
-        quantity: 1 
-      }
-    }).catch(e => console.error('LINE notification failed:', e));
-    */
-
     showToast('リストに追加しました🔄');
     fetchItems(true);
   } catch (e) {
@@ -1257,18 +1307,33 @@ window.repeatItem = async (id, event) => {
 
 // ログインボタン処理
 document.getElementById('login-btn').onclick = async () => {
+  const key = document.getElementById('supabase-key-input').value.trim();
   const pass = document.getElementById('password-input').value.trim();
-  if (!pass) return;
   
+  if (!key || !pass) {
+    await window.showAlert('接続番号とパスワードを両方入力してください。');
+    return;
+  }
+
+  if (!window.supabase) {
+    await window.showAlert('システムが読み込めていません。<br>通信環境の良い場所でアプリを再読み込みしてください。');
+    return;
+  }
+
   const btn = document.getElementById('login-btn');
   btn.disabled = true;
   
   try {
+    dbClient = window.supabase.createClient(SUPABASE_URL, key);
     const { data, error } = await dbClient.rpc('authenticate_user', { p_pass: pass });
+    
     if (error || !data) throw new Error('Invalid');
     
+    state.supabaseKey = key;
     state.password = pass;
     state.userName = data;
+    
+    localStorage.setItem('app_supabase_key', key);
     localStorage.setItem('app_password', pass);
     
     showToast('ログインしました');
@@ -1276,7 +1341,12 @@ document.getElementById('login-btn').onclick = async () => {
     startSync();
   } catch (e) {
     console.error('Login failed:', e);
-    await window.showAlert('パスワードが違います。');
+    if (e.message === 'Invalid') {
+      await window.showAlert('接続番号またはパスワードが違います。');
+    } else {
+      await window.showAlert('通信エラーが発生しました。<br>電波の良い場所でお試しください。');
+    }
+    dbClient = null;
   } finally {
     btn.disabled = false;
   }
@@ -1284,20 +1354,21 @@ document.getElementById('login-btn').onclick = async () => {
 
 // ログアウト処理
 const logout = () => {
+  localStorage.removeItem('app_supabase_key');
   localStorage.removeItem('app_password');
+  
+  state.supabaseKey = '';
   state.password = '';
   state.userName = '';
+  dbClient = null;
+  
   if (syncInterval) clearInterval(syncInterval);
   render();
 };
 
 // 詳細画面からの戻る処理
 document.getElementById('back-btn').onclick = () => {
-  state.currentCategory = null;
-  state.isEditMode = false;
-  state.selectedIds.clear();
-  render();
-  fetchItems(true);
+  history.back();
 };
 
 // 履歴画面への遷移
@@ -1305,7 +1376,9 @@ document.getElementById('go-history-btn').onclick = () => {
   state.currentCategory = 'history';
   state.isEditMode = false;
   state.selectedIds.clear();
-  
+
+  history.pushState({ page: 'history' }, '', '');
+
   state.isTransitioning = true;
   render();
   fetchItems(true);
@@ -1329,6 +1402,8 @@ document.getElementById('qty-plus').onclick = () => {
 
 // 新規アイテム追加処理
 document.getElementById('add-btn').onclick = async () => {
+  if (await checkOffline()) return; // ガード
+
   const nameInput = document.getElementById('new-item-name');
   const memoInput = document.getElementById('new-item-memo');
   const name = nameInput.value.trim();
@@ -1351,17 +1426,6 @@ document.getElementById('add-btn').onclick = async () => {
       p_quantity: state.newQuantity
     });
     
-    /*
-    dbClient.functions.invoke('line-notify', {
-      body: { 
-        user: state.userName, 
-        category: state.currentCategory, 
-        itemName: name, 
-        quantity: state.newQuantity 
-      }
-    }).catch(e => console.error('LINE notification failed:', e));
-    */
-
     nameInput.blur();
     memoInput.blur();
 
@@ -1422,6 +1486,7 @@ const updateSelectCount = () => {
 
 // 選択したアイテムの一括購入処理
 document.getElementById('purchase-selected-btn').onclick = async () => {
+  if (await checkOffline()) return; // ガード
   if (state.selectedIds.size === 0) return;
   
   const selectedItems = state.items.filter(i => state.selectedIds.has(String(i.id)));
@@ -1461,6 +1526,7 @@ document.getElementById('purchase-selected-btn').onclick = async () => {
 
 // 選択したアイテムの一括削除処理
 document.getElementById('delete-selected-btn').onclick = async () => {
+  if (await checkOffline()) return; // ガード
   if (state.selectedIds.size === 0) return;
   
   const ids = Array.from(state.selectedIds);
@@ -1479,11 +1545,38 @@ document.getElementById('delete-selected-btn').onclick = async () => {
 };
 
 // ==========================================
-// 7. Initialization
+// 7. Initialization & Auto Recovery
 // ==========================================
 
-// ローカルのキャッシュパスワードを用いた自動ログイン処理
-if (state.password) {
+// ログイン処理と定期同期の開始を関数化
+const attemptLoginAndSync = () => {
+  if (!state.supabaseKey || !state.password) {
+    render();
+    return;
+  }
+  
+  if (!window.supabase) {
+    if (state.userName !== 'オフライン(閲覧のみ)') {
+      showToast('オフラインのため、保存されたリストを表示します', 'error');
+    }
+    state.userName = 'オフライン(閲覧のみ)';
+    
+    try {
+      const cachedItems = localStorage.getItem('app_cached_items');
+      if (cachedItems) state.items = JSON.parse(cachedItems);
+      
+      const cachedHistory = localStorage.getItem('app_cached_history');
+      if (cachedHistory) state.historyItems = JSON.parse(cachedHistory);
+    } catch (parseError) {
+      console.error('Cache parse error:', parseError);
+    }
+    
+    render();
+    return;
+  }
+
+  dbClient = window.supabase.createClient(SUPABASE_URL, state.supabaseKey);
+  
   dbClient.rpc('authenticate_user', { p_pass: state.password })
     .then(({ data, error }) => {
       if (error || !data) throw new Error('Invalid');
@@ -1492,13 +1585,79 @@ if (state.password) {
       startSync();
     })
     .catch((e) => {
-      // オフライン・通信エラー時はログアウトせずエラー通知のみ表示
       if (e.message !== 'Invalid') {
-        showToast('オフライン、または通信が不安定です', 'error');
+        if (state.userName !== 'オフライン(閲覧のみ)') {
+          showToast('オフラインのため、保存されたリストを表示します', 'error');
+        }
+        state.userName = 'オフライン(閲覧のみ)';
+        
+        try {
+          const cachedItems = localStorage.getItem('app_cached_items');
+          if (cachedItems) state.items = JSON.parse(cachedItems);
+          
+          const cachedHistory = localStorage.getItem('app_cached_history');
+          if (cachedHistory) state.historyItems = JSON.parse(cachedHistory);
+        } catch (parseError) {
+          console.error('Cache parse error:', parseError);
+        }
+        
+        render();
         return;
       }
       logout();
     });
-} else {
-  render();
-}
+};
+
+// 初回起動時の実行
+attemptLoginAndSync();
+
+// 電波が戻った瞬間に自動でオンラインに復帰する
+window.addEventListener('online', () => {
+  if (state.userName === 'オフライン(閲覧のみ)') {
+    showToast('通信が回復しました。自動で再接続します...', 'success');
+    attemptLoginAndSync();
+  }
+});
+
+// アプリ起動中に電波を失った場合、自動で閲覧モードに切り替える
+window.addEventListener('offline', () => {
+  if (state.userName && state.userName !== 'オフライン(閲覧のみ)') {
+    showToast('通信が切断されました。閲覧モードに移行します', 'error');
+    state.userName = 'オフライン(閲覧のみ)';
+    render();
+  }
+});
+
+// スマホ本体の戻るボタンに対応する処理
+window.addEventListener('popstate', (event) => {
+  // ダイアログが出ている時は、自動で「キャンセル/閉じる」をクリックさせる
+  const overlays = document.querySelectorAll('div[style*="z-index: 10000"]');
+  if (overlays.length > 0) {
+    // 最前面のダイアログを取得
+    const topOverlay = overlays[overlays.length - 1];
+    
+    // ダイアログ内のボタンを探してクリック
+    const buttons = Array.from(topOverlay.querySelectorAll('button')).filter(b => b.offsetParent !== null);
+    const closeBtn = buttons.find(b => 
+      ['キャンセル', '閉じる', '確認画面に戻る', 'OK'].includes(b.textContent.trim())
+    ) || buttons[0];
+    
+    if (closeBtn) closeBtn.click();
+
+    // トップ画面(null)の時にエラーが出た場合も考慮し、正確な状態の履歴を復元する
+    const pageState = state.currentCategory === 'history' ? 'history' : (state.currentCategory ? 'detail' : 'home');
+    history.pushState({ page: pageState }, '', '');
+    return;
+  }
+
+  if (state.currentCategory !== null) {
+    // 詳細画面にいる時に本体の戻るボタンが押されたら一覧に戻る
+    state.currentCategory = null;
+    state.isEditMode = false;
+    state.selectedIds.clear();
+    state.newQuantity = 1;
+    document.getElementById('qty-display').textContent = '1';
+    render();
+    fetchItems(true);
+  }
+});

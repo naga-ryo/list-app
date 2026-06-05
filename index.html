@@ -5,6 +5,14 @@
   <meta property="og:description" content="" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>みんなの買い物リスト</title>
+  
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2ecc71">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="買い物リスト">
+  <link rel="apple-touch-icon" href="icon.png">
+
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -15,7 +23,8 @@
     <div class="login-container">
       <div class="login-logo">🛒</div>
       <h1>みんなの買い物リスト</h1>
-      <p>パスワードを入力してスタート</p>
+      <p>接続番号とパスワードを入力</p>
+      <input type="password" id="supabase-key-input" placeholder="接続番号" autocomplete="off">
       <input type="password" id="password-input" placeholder="パスワードを入力">
       <button id="login-btn" class="primary-btn">ログイン</button>
     </div>
@@ -68,5 +77,15 @@
   </div>
 
   <script src="script.js"></script>
+  
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('ServiceWorker 登録完了'))
+          .catch(err => console.log('ServiceWorker 登録失敗', err));
+      });
+    }
+  </script>
 </body>
 </html>

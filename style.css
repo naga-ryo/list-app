@@ -520,7 +520,7 @@ button:active {
 }
 
 #new-item-memo { 
-  font-size: 0.85rem; 
+  font-size: 1rem; 
   padding: 8px 10px; 
   background: #ffffff; 
 }
